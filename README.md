@@ -38,28 +38,64 @@ Agent Harness）在完成任务的过程中，把自己的执行经验蒸馏成�
 
 ```
 FederatedSkill-Reproduction/
-├── core/                # 全局数据模型（ρ_i/τ_i/δ_i^t/C^t/...）+ 超参数常量 + 异常层次
-├── llm/                 # LLM 调用抽象层（litellm 统一路由、重试、JSON 解析）
-├── prompts/             # Stage1 / Stage2 / Patch 三份提示词文本（与算法代码解耦）
-├── client/              # 客户端：TaskExecutor / PatchDistiller / SkillLibrary /
-│                         # TrajectoryCompressor / agent_runtime/（Planner-Action-Observation 循环）
-├── server/              # 服务端：EvolutionPlanner（Stage1）/ EvolutionExecutor（Stage2）/
-│                         # FederatedServer（run_round 编排）/ CapabilityTracker / MemoryStore
-├── benchmark/            # 任务与 family 定义、采样器、验证器、SkillFlow 数据集适配
-│   ├── families/         # 25 个 family JSON（20 个真实 SkillFlow + 5 个手写）
-│   ├── skillflow_adapter/ # 真实 SkillFlow 数据集下载与格式转换
-│   └── cache/            # 数据集下载缓存（不提交到 git，见「运行实验」§数据集准备）
-├── executor/             # 真实任务执行沙箱（mock / python / skillflow / agent workspace 四种执行器）
-├── harness/              # 真实 CLI Agent Harness（claude-code / qwen-code / kimi-cli）
-├── evaluation/           # 论文核心指标、跨轮评估、Capability Matrix 演化追踪、报告/绘图
-├── experiments/           # 统一实验入口 run_experiment.py + Setting1-4/消融 YAML 配置（configs/）
-├── scripts/               # 环境预检、数据集下载、代表性子集选取与校验、连通性检查工具
-├── config/  configs/       # 全局运行时配置（settings.yaml / runtime.yaml）
-├── docs/                  # 复现文档：论文对照、实验设置说明、简化点声明、历史分析记录（analysis_notes/）
-├── results/                # 实验产出（success_rate / capability 演化 / skill library 演化等，见 §6）
-├── main_trainer.py, run.py # 旧版/辅助入口
-├── requirements.txt, requirements-real.txt
-└── pytest.ini
+├── core/                    # 数据模型 + 常量 + 异常
+│   ├── datatypes.py         # 所有 Pydantic 模型（对应上表）
+│   ├── constants.py         # 超参数（K_STEP=20, K_OBS=3000等）
+│   └── exceptions.py        # 异常层次定义
+│
+├── llm/                     # LLM调用抽象层（多模型支持）
+│   ├── backbone.py          # LLMBackbone基类
+│   ├── router.py            # BackboneRouter路由表（worker_id→LLM实例）
+│   └── prompt_builder.py    # 提示词构建工具
+│
+├── prompts/                 # 三份提示词文本（与代码解耦）
+│   ├── stage1_*.txt         # Stage1规划提示词
+│   ├── stage2_*.txt         # Stage2合并提示词
+│   └── patch_prompt.txt     # Patch蒸馏提示词
+│
+├── client/                  # **客户端侧**（每个Worker一份实例）
+│   ├── federated_client.py  # FederatedClient（协调端点）
+│   ├── executor.py          # TaskExecutor（5步执行流：检索→构建→生成→执行→验证）
+│   ├── distiller.py         # PatchDistiller（7步蒸馏流：压缩→快照→解析→LLM→验证）
+│   ├── library.py           # SkillLibrary（技能库读写）
+│   ├── trajectory.py        # TrajectoryCompressor（轨迹压缩）
+│   └── agent_runtime/       # 真实CLI Agent运行时支持
+│
+├── server/                  # **服务端侧**（跨Worker单例）
+│   ├── evolution.py         # FederatedServer（run_round总调度）
+│   ├── planner.py           # EvolutionPlanner（Stage1规划）
+│   ├── merge.py             # EvolutionExecutor（Stage2执行，per-worker）
+│   ├── capability.py        # CapabilityTracker（能力矩阵管理）
+│   ├── memory.py            # EvolutionMemoryStore（跨轮记忆机制）
+│   └── prompt_builder.py    # Stage1/Stage2提示词构建
+│
+├── benchmark/               # 任务与数据集
+│   ├── family.py            # TaskFamily（同一技能的递增难度任务序列）
+│   ├── task.py              # Task（单个任务定义）
+│   ├── verifier.py          # VerificationResult（奖励计算）
+│   ├── families/            # 25个family JSON（20个真实SkillFlow+5个手写）
+│   └── skillflow_adapter/   # 真实SkillFlow数据集下载与格式转换
+│
+├── executor/                # 真实任务执行沙箱
+│   └── agent_executor.py    # 支持真实workspace模式的executor
+│
+├── evaluation/              # 论文指标计算与分析
+│   ├── metrics.py           # 核心指标（成功率、覆盖度等）
+│   ├── cost_accounting.py   # 成本审计（Appendix C）
+│   ├── capability_tracker.py# 能力矩阵演化追踪
+│   └── reporter.py          # 报告与绘图
+│
+├── experiments/             # 统一实验入口
+│   └── run_experiment.py    # CLI入口 + Setting1-4配置
+│
+├── scripts/                 # 工具脚本
+│   ├── select_representative_families.py  # 代表性子集选取
+│   └── 其他预检与验证脚本
+│
+└── docs/                    # 复现文档
+    ├── paper_mapping.md             # 论文↔代码对照
+    ├── detailed_verification_report.md  # 函数级核验记录
+    └── analysis_notes/              # 历史分析记录
 ```
 
 各目录用途简述：
