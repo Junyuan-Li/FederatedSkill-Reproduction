@@ -1,0 +1,142 @@
+{
+  "family_id": "data_cleaning",
+  "description": "同一技能 csv_row_cleaning 的递增难度序列：从解析 CSV，到缺失值处理、类型转换、去重，最终组合成完整清洗流水线。",
+  "skill_name": "csv_row_cleaning",
+  "tasks": [
+    {
+      "task_id": "data_cleaning_d1_parse",
+      "category": "data_cleaning",
+      "family_id": "data_cleaning",
+      "description": "Write a Python function named `parse_csv_rows` that takes a string `text` (first line = comma-separated header, following lines = comma-separated values) and returns a list of dicts mapping header name to raw string value. Do not import anything except the standard library string methods (no `csv` module).",
+      "required_skills": ["csv_row_cleaning"],
+      "difficulty": 1,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "parse_csv_rows",
+        "test_cases": [
+          {
+            "inputs": ["name,age\nAlice,25\nBob,17"],
+            "expected": [{"name": "Alice", "age": "25"}, {"name": "Bob", "age": "17"}],
+            "description": "基础两行解析"
+          },
+          {
+            "inputs": ["a,b\n1,2"],
+            "expected": [{"a": "1", "b": "2"}],
+            "description": "单行解析"
+          },
+          {
+            "inputs": ["name,age"],
+            "expected": [],
+            "description": "只有表头，无数据行"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 1}
+    },
+    {
+      "task_id": "data_cleaning_d2_drop_missing",
+      "category": "data_cleaning",
+      "family_id": "data_cleaning",
+      "description": "Write a Python function named `drop_missing` that takes `rows` (list of dicts) and `required_fields` (list of str). Return a new list keeping only rows where every field in `required_fields` has a non-empty string value. If `required_fields` is empty, keep all rows.",
+      "required_skills": ["csv_row_cleaning"],
+      "difficulty": 2,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "drop_missing",
+        "test_cases": [
+          {
+            "inputs": [[{"name": "Alice", "age": "25"}, {"name": "", "age": "17"}, {"name": "Bob", "age": ""}], ["name", "age"]],
+            "expected": [{"name": "Alice", "age": "25"}],
+            "description": "过滤缺失 name 或 age 的行"
+          },
+          {
+            "inputs": [[{"a": "1"}], []],
+            "expected": [{"a": "1"}],
+            "description": "无必填字段时全部保留"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 2}
+    },
+    {
+      "task_id": "data_cleaning_d3_normalize_types",
+      "category": "data_cleaning",
+      "family_id": "data_cleaning",
+      "description": "Write a Python function named `normalize_types` that takes `rows` (list of dicts) and `numeric_fields` (list of str). For each row, convert every field listed in `numeric_fields` from string to float. If a field is missing or cannot be converted to float, drop that entire row from the output. Return the resulting list of dicts (non-numeric fields unchanged).",
+      "required_skills": ["csv_row_cleaning"],
+      "difficulty": 3,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "normalize_types",
+        "test_cases": [
+          {
+            "inputs": [[{"name": "Alice", "age": "25"}, {"name": "Bob", "age": "abc"}], ["age"]],
+            "expected": [{"name": "Alice", "age": 25.0}],
+            "description": "非法数值行被丢弃"
+          },
+          {
+            "inputs": [[{"x": "1.5"}, {"x": "2"}], ["x"]],
+            "expected": [{"x": 1.5}, {"x": 2.0}],
+            "description": "两行均转换成功"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 3}
+    },
+    {
+      "task_id": "data_cleaning_d4_dedupe",
+      "category": "data_cleaning",
+      "family_id": "data_cleaning",
+      "description": "Write a Python function named `dedupe_rows` that takes `rows` (list of dicts) and `key_fields` (list of str). Return a new list keeping only the first occurrence of each unique combination of values at `key_fields`, preserving original order.",
+      "required_skills": ["csv_row_cleaning"],
+      "difficulty": 4,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "dedupe_rows",
+        "test_cases": [
+          {
+            "inputs": [[{"name": "Alice", "age": 25.0}, {"name": "Alice", "age": 25.0}, {"name": "Bob", "age": 17.0}], ["name", "age"]],
+            "expected": [{"name": "Alice", "age": 25.0}, {"name": "Bob", "age": 17.0}],
+            "description": "去掉完全重复的第二行"
+          },
+          {
+            "inputs": [[{"id": 1}, {"id": 1}, {"id": 2}], ["id"]],
+            "expected": [{"id": 1}, {"id": 2}],
+            "description": "按单一 key 去重"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 4}
+    },
+    {
+      "task_id": "data_cleaning_d5_pipeline",
+      "category": "data_cleaning",
+      "family_id": "data_cleaning",
+      "description": "Write a Python function named `clean_pipeline` that takes `text` (raw CSV string), `required_fields` (list of str), `numeric_fields` (list of str), and `key_fields` (list of str). Combine parsing, dropping rows with missing required fields, converting numeric fields to float (dropping rows that fail conversion), and de-duplicating by `key_fields` (keep first). Return the final cleaned list of dicts. This combines all the skills from the previous tasks in this family into one pipeline.",
+      "required_skills": ["csv_row_cleaning"],
+      "difficulty": 5,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "clean_pipeline",
+        "test_cases": [
+          {
+            "inputs": ["name,age\nAlice,25\nAlice,25\nBob,\n,17", ["name", "age"], ["age"], ["name", "age"]],
+            "expected": [{"name": "Alice", "age": 25.0}],
+            "description": "完整流水线：丢缺失、转数值、去重"
+          },
+          {
+            "inputs": ["a,b\n1,2\n3,x", ["a", "b"], ["b"], ["a"]],
+            "expected": [{"a": "1", "b": 2.0}],
+            "description": "第二行数值转换失败被丢弃"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 5}
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+# FederatedSkill Reproduction - real experiment dependencies
+# Install: pip install -r requirements-real.txt
+
+# --- Core framework ---
+pydantic>=2.8.0
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+
+# --- LLM routing (litellm supports DashScope / Moonshot / Anthropic / OpenAI) ---
+# Pin upper bound: versions >=1.85 require Rust to build from source on Windows
+litellm>=1.67.0,<1.85.0
+
+# --- Data processing and networking ---
+requests>=2.32.0
+tqdm>=4.66.0
+
+# --- Figures and tables (optional, skip if not plotting) ---
+matplotlib>=3.9.0
+numpy>=1.26.0
+pandas>=2.2.0
+
+# --- SkillFlow document verifier runtime ---
+python-docx>=1.1.0
+
+# --- Dataset download (SkillFlow from HuggingFace) ---
+huggingface-hub>=0.24.0
+
+# --- Testing ---
+pytest>=8.0.0

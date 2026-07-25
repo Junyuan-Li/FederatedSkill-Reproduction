@@ -1,0 +1,120 @@
+{
+  "family_id": "document_processing",
+  "description": "同一技能 text_field_extraction 的递增难度序列：从提取邮箱，到提取电话、脏数据打码、去重，最终组合成完整联系人报告。",
+  "skill_name": "text_field_extraction",
+  "tasks": [
+    {
+      "task_id": "document_processing_d1_emails",
+      "category": "document_processing",
+      "family_id": "document_processing",
+      "description": "Write a Python function named `extract_emails` that takes a string `text` and returns a list of all email addresses found in it, in the order they appear. An email looks like 'name@domain.tld' (letters, digits, dots, underscores, hyphens on both sides of '@'). Use the `re` module.",
+      "required_skills": ["text_field_extraction"],
+      "difficulty": 1,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "extract_emails",
+        "test_cases": [
+          {
+            "inputs": ["Contact: alice@example.com or bob.smith@test.org for help"],
+            "expected": ["alice@example.com", "bob.smith@test.org"],
+            "description": "提取两个邮箱"
+          },
+          {"inputs": ["no email here"], "expected": [], "description": "无邮箱返回空列表"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 1}
+    },
+    {
+      "task_id": "document_processing_d2_phones",
+      "category": "document_processing",
+      "family_id": "document_processing",
+      "description": "Write a Python function named `extract_phone_numbers` that takes a string `text` and returns a list of all phone numbers in the exact format 'XXX-XXX-XXXX' (3 digits, hyphen, 3 digits, hyphen, 4 digits), in the order they appear. Use the `re` module.",
+      "required_skills": ["text_field_extraction"],
+      "difficulty": 2,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "extract_phone_numbers",
+        "test_cases": [
+          {
+            "inputs": ["Call 123-456-7890 or 987-654-3210"],
+            "expected": ["123-456-7890", "987-654-3210"],
+            "description": "提取两个电话号码"
+          },
+          {"inputs": ["no phone"], "expected": [], "description": "无电话返回空列表"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 2}
+    },
+    {
+      "task_id": "document_processing_d3_mask",
+      "category": "document_processing",
+      "family_id": "document_processing",
+      "description": "Write a Python function named `mask_sensitive` that takes a string `text`, finds every email address (same pattern as extract_emails) and every phone number (same pattern as extract_phone_numbers), and returns a new string with all of them replaced by the literal text '[REDACTED]'.",
+      "required_skills": ["text_field_extraction"],
+      "difficulty": 3,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "mask_sensitive",
+        "test_cases": [
+          {
+            "inputs": ["Email alice@example.com and call 123-456-7890 now"],
+            "expected": "Email [REDACTED] and call [REDACTED] now",
+            "description": "邮箱和电话都被打码"
+          },
+          {"inputs": ["nothing sensitive"], "expected": "nothing sensitive", "description": "无敏感信息保持原样"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 3}
+    },
+    {
+      "task_id": "document_processing_d4_dedupe_contacts",
+      "category": "document_processing",
+      "family_id": "document_processing",
+      "description": "Write a Python function named `dedupe_contacts` that takes a list of strings `contacts` and returns a new list with duplicate entries removed, preserving the order of first occurrence.",
+      "required_skills": ["text_field_extraction"],
+      "difficulty": 4,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "dedupe_contacts",
+        "test_cases": [
+          {
+            "inputs": [["a@x.com", "b@x.com", "a@x.com"]],
+            "expected": ["a@x.com", "b@x.com"],
+            "description": "去掉重复的第三项"
+          },
+          {"inputs": [[]], "expected": [], "description": "空列表返回空列表"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 4}
+    },
+    {
+      "task_id": "document_processing_d5_report",
+      "category": "document_processing",
+      "family_id": "document_processing",
+      "description": "Write a Python function named `extract_contact_report` that takes a string `text`. Extract all emails and all phone numbers (same patterns as previous tasks), de-duplicate each list preserving order, and build the masked version of `text` (replace every found email/phone with '[REDACTED]'). Return a dict with keys 'emails', 'phones', and 'masked_text'. This combines all the skills from the previous tasks in this family into one report.",
+      "required_skills": ["text_field_extraction"],
+      "difficulty": 5,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "extract_contact_report",
+        "test_cases": [
+          {
+            "inputs": ["Reach alice@example.com or alice@example.com, phone 123-456-7890"],
+            "expected": {
+              "emails": ["alice@example.com"],
+              "phones": ["123-456-7890"],
+              "masked_text": "Reach [REDACTED] or [REDACTED], phone [REDACTED]"
+            },
+            "description": "完整联系人报告（含去重）"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 5}
+    }
+  ]
+}

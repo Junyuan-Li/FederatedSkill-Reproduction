@@ -1,0 +1,61 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Setting 1: Self-Evolution Baseline (SE)
+#
+# 论文 Section 5.1 / Table 1 "SE" 列：
+#   每个 client 独立进化，无服务器协作。
+#   等价于：FederatedSkill with N=1（或 N>1 但 federated=false）。
+#
+# [已修正 - 最终论文一致性收口 Priority 4] 本配置文件的 workers 列表下面
+# 实际只有 1 个 worker（u0），对应论文 SE baseline 的单 worker 独立进化设置
+# （federated: false，8 轮）。此前本注释错误写着"三个不同 backbone+harness
+# 的 client"，与实际配置不符（那是 Setting2-4 联邦设置的描述），纯文档笔误，
+# 现已更正——不影响任何已运行实验的结果，只是修正误导性描述。
+# 若要复现论文 SE-GLM / SE-Kimi 变体，需分别用不同 backbone_model 重新启动
+# （见下方 workers 块注释）。
+# ──────────────────────────────────────────────────────────────────────────────
+
+setting_name: "SE_Self_Evolution"
+description: |
+  Setting 1: Self-Evolve (SE) — single-worker baseline.
+  Corresponds to official configs/1_se_qwen.local.yaml.
+  One worker (qwen3.6-plus via Anthropic-compatible Dashscope endpoint)
+  repeatedly solves tasks; patcher distills trajectory into skill patches.
+  No federation, no merger — within-worker only baseline.
+federated: false
+
+rounds: 8
+seed: 42
+# [Runtime Protocol Alignment Issue2] 0（原 2）：对齐官方 paper_logs 真实
+# 运行记录 retry.max_retries=0（且显式排除 AgentTimeoutError 等不可重试），
+# 即 agent 执行/超时失败不重试，直接记为该 task 失败（reward=0），继续
+# 下一个 task，不中断 family。详见 timeout_policy_report.md。
+max_retry: 0
+# Phase1 修正（恢复论文原始实验单位）：不再把 20 个 family 打平成一个池子
+# 随机抽取，而是按 family 循环——每个 family 从空技能库开始。
+# TASK3 修正：round 数默认等于该 family 的任务数（8 或 9，与论文 Table 6
+# 一致），上面的 rounds: 8 在 loop_over_families 模式下仅在
+# rounds_per_family_mode="fixed_cap" 时才作为 cap 生效（默认不生效）。
+sampler: "family_curriculum"
+loop_over_families: true
+rounds_per_family_mode: "family_length"  # 默认值，显式声明不依赖隐式默认
+# TASK1 修正（P0）：只跑论文定义的 20 个官方 SkillFlow family，排除
+# benchmark/families/ 下 5 个本项目自建的 legacy family（不删除磁盘文件）。
+paper_benchmark_only: true
+output_dir: "results/setting1_se"
+
+# Official patcher config (matches configs/1_se_qwen.local.yaml)
+patcher:
+  temperature: 0.2  # _resolve_patch_temperature: 0.2 for qwen/glm
+
+# Single worker — official SE is a single-worker run
+# (re-launch with different model_name for SE-GLM and SE-Kimi variants)
+workers:
+  - client_id: "u0"
+    backbone_model: "qwen3.6-plus"             # official model name
+    agent_harness: "claude-code"               # NoInstallClaudeCode in official
+    model_provider: "dashscope"
+    # 与官方 configs/1_se_qwen.local.yaml 一致的 Anthropic-compatible endpoint
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "QWEN_DASHSCOPE_API_KEY"     # Provider Key Isolation Fix: Qwen 专属变量（原 DASHSCOPE_KEY）
+    max_context_tokens: 131072
+    is_moonshot: false

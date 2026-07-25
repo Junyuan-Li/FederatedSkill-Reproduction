@@ -1,0 +1,129 @@
+{
+  "family_id": "data_transformation",
+  "description": "同一技能 record_reshaping 的递增难度序列：从字典扁平化，到透视、分组、左连接，最终组合成完整重塑报告。",
+  "skill_name": "record_reshaping",
+  "tasks": [
+    {
+      "task_id": "data_transformation_d1_flatten",
+      "category": "data_transformation",
+      "family_id": "data_transformation",
+      "description": "Write a Python function named `flatten_dict` that takes a (possibly nested) dict `d` and returns a new flat dict where nested keys are joined with '.'. E.g. {'a': {'b': 1}} -> {'a.b': 1}. Handle arbitrary nesting depth recursively.",
+      "required_skills": ["record_reshaping"],
+      "difficulty": 1,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "flatten_dict",
+        "test_cases": [
+          {
+            "inputs": [{"a": 1, "b": {"c": 2, "d": 3}}],
+            "expected": {"a": 1, "b.c": 2, "b.d": 3},
+            "description": "一层嵌套扁平化"
+          },
+          {
+            "inputs": [{"x": {"y": {"z": 5}}}],
+            "expected": {"x.y.z": 5},
+            "description": "多层嵌套扁平化"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 1}
+    },
+    {
+      "task_id": "data_transformation_d2_pivot",
+      "category": "data_transformation",
+      "family_id": "data_transformation",
+      "description": "Write a Python function named `pivot_records` that takes `records` (list of dicts), `key_field` (str), and `value_field` (str). Return a dict mapping each record's `key_field` value to its `value_field` value. If multiple records share the same key, the later record in the list wins.",
+      "required_skills": ["record_reshaping"],
+      "difficulty": 2,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "pivot_records",
+        "test_cases": [
+          {
+            "inputs": [[{"id": "a", "val": 1}, {"id": "b", "val": 2}], "id", "val"],
+            "expected": {"a": 1, "b": 2},
+            "description": "简单透视"
+          },
+          {
+            "inputs": [[{"id": "a", "val": 1}, {"id": "a", "val": 9}], "id", "val"],
+            "expected": {"a": 9},
+            "description": "重复 key 时后者覆盖前者"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 2}
+    },
+    {
+      "task_id": "data_transformation_d3_group_by",
+      "category": "data_transformation",
+      "family_id": "data_transformation",
+      "description": "Write a Python function named `group_by` that takes `records` (list of dicts) and `field` (str). Return a dict mapping each distinct value of `field` to the list of records that have that value, preserving original order within each group.",
+      "required_skills": ["record_reshaping"],
+      "difficulty": 3,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "group_by",
+        "test_cases": [
+          {
+            "inputs": [[{"cat": "x", "v": 1}, {"cat": "y", "v": 2}, {"cat": "x", "v": 3}], "cat"],
+            "expected": {"x": [{"cat": "x", "v": 1}, {"cat": "x", "v": 3}], "y": [{"cat": "y", "v": 2}]},
+            "description": "按字段分组"
+          },
+          {"inputs": [[], "cat"], "expected": {}, "description": "空列表返回空dict"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 3}
+    },
+    {
+      "task_id": "data_transformation_d4_merge",
+      "category": "data_transformation",
+      "family_id": "data_transformation",
+      "description": "Write a Python function named `merge_records` that takes `a` (list of dicts), `b` (list of dicts), and `key_field` (str). For each record in `a`, if there is a record in `b` with the same `key_field` value, merge b's fields into a's record (b's values overwrite/add). If no match exists in `b`, keep a's record unchanged. Records in `b` with no match in `a` are ignored. Return the resulting list, preserving the order of `a`.",
+      "required_skills": ["record_reshaping"],
+      "difficulty": 4,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "merge_records",
+        "test_cases": [
+          {
+            "inputs": [[{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}], [{"id": 1, "age": 30}], "id"],
+            "expected": [{"id": 1, "name": "Alice", "age": 30}, {"id": 2, "name": "Bob"}],
+            "description": "左连接合并"
+          },
+          {
+            "inputs": [[{"id": 1, "x": 1}], [], "id"],
+            "expected": [{"id": 1, "x": 1}],
+            "description": "b为空时a不变"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 4}
+    },
+    {
+      "task_id": "data_transformation_d5_reshape_report",
+      "category": "data_transformation",
+      "family_id": "data_transformation",
+      "description": "Write a Python function named `reshape_report` that takes `records` (list of dicts), `group_field` (str), and `value_field` (str). Group records by `group_field` (like group_by), then for each group return the sum of `value_field` across that group's records. Return a dict mapping group value to the summed total. This combines all the skills from the previous tasks in this family into one report.",
+      "required_skills": ["record_reshaping"],
+      "difficulty": 5,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "reshape_report",
+        "test_cases": [
+          {
+            "inputs": [[{"cat": "x", "v": 1}, {"cat": "x", "v": 3}, {"cat": "y", "v": 2}], "cat", "v"],
+            "expected": {"x": 4, "y": 2},
+            "description": "分组求和报告"
+          },
+          {"inputs": [[], "cat", "v"], "expected": {}, "description": "空列表返回空dict"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 5}
+    }
+  ]
+}

@@ -1,0 +1,487 @@
+{
+  "family_id": "Cross-Format-Data-Reconciliation",
+  "description": "真实 SkillFlow family: Cross-Format-Data-Reconciliation（8 个递增难度任务）",
+  "skill_name": "Cross-Format-Data-Reconciliation",
+  "tasks": [
+    {
+      "task_id": "01-cloud-service-portfolio-diff",
+      "category": "Cross-Format-Data-Reconciliation",
+      "family_id": "Cross-Format-Data-Reconciliation",
+      "description": "You are assisting a cloud cost governance team in reconciling an archived PDF snapshot against the latest workbook.\n\nThe archived snapshot is stored in PDF format at `/root/cloud_service_portfolio_archive.pdf`.\nThe current operational dataset is stored in Excel format at `/root/cloud_service_portfolio_current.xlsx`.\n\nYour task is to:\n\n1. Extract the full table from the archived PDF.\n2. Compare it against the current Excel file using `ID` as the primary key.\n3. Detect:\n   - which IDs were removed from the current dataset,\n   - which records were modified (include `id`, `field`, `old_value`, and `new_value`).\n\nWrite the final result to `/root/cloud_service_portfolio_diff.json` in the following JSON format:\n\n```json\n{\n  \"retired_service_ids\": [\n    \"CSV0006\",\n    \"CSV0009\"\n  ],\n  \"changed_services\": [\n    {\n      \"id\": \"CSV0001\",\n      \"field\": \"Spend2024K\",\n      \"old_value\": 10128,\n      \"new_value\": 10360\n    }\n  ]\n}\n```\n\nNotes:\n- The PDF contains the older baseline snapshot.\n- The Excel file contains the newer current snapshot.\n- ID values must match pattern `^CSV\\d{4}$`.\n- Numeric fields (`Spend2019K`, `Spend2024K`, `FiveYearCAGR`) must be output as numbers.\n- Text fields must be output as strings.\n- If a record has multiple changed fields, emit one object per field.\n- Sort both `retired_service_ids` and `changed_services` by ID for deterministic output.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Tests for 01-cloud-service-portfolio-diff.\"\"\"\n\nimport json\nimport re\nfrom pathlib import Path\n\nimport pytest\n\n\ndef diff_close(actual, expected, tol=0.01):\n    \"\"\"Compare diff JSON with numeric tolerance for old_value/new_value.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch\"\n        for k in expected:\n            ok, msg = diff_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = diff_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric: {actual} vs {expected}\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"Text: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value: {actual} vs {expected}\"\n        return True, \"\"\n\nOUTPUT_FILE = Path(\"/root/cloud_service_portfolio_diff.json\")\nDELETED_KEY = \"retired_service_ids\"\nMODIFIED_KEY = \"changed_services\"\nID_PATTERN = re.compile(r\"^CSV\\d{4}$\")\nEXPECTED = {\n  \"retired_service_ids\": [\n    \"CSV0006\",\n    \"CSV0009\"\n  ],\n  \"changed_services\": [\n    {\n      \"id\": \"CSV0001\",\n      \"field\": \"Spend2024K\",\n      \"old_value\": 10128,\n      \"new_value\": 10360\n    },\n    {\n      \"id\": \"CSV0004\",\n      \"field\": \"Owner\",\n      \"old_value\": \"Security Operations\",\n      \"new_value\": \"Platform Security\"\n    },\n    {\n      \"id\": \"CSV0005\",\n      \"field\": \"FiveYearCAGR\",\n      \"old_value\": -0.81,\n      \"new_value\": 0.25\n    },\n    {\n      \"id\": \"CSV0007\",\n      \"field\": \"Service\",\n      \"old_value\": \"CI/CD\",\n      \"new_value\": \"Developer Platform\"\n    }\n  ]\n}\n\ndef load_output():\n    assert OUTPUT_FILE.exists(), f\"Output file not found at {OUTPUT_FILE}\"\n    try:\n        return json.loads(OUTPUT_FILE.read_text(encoding=\"utf-8\"))\n    except json.JSONDecodeError as exc:\n        pytest.fail(f\"Output is not valid JSON: {exc}\")\n\ndef test_output_shape():\n    data = load_output()\n    assert set(data.keys()) == {DELETED_KEY, MODIFIED_KEY}\n    assert isinstance(data[DELETED_KEY], list)\n    assert isinstance(data[MODIFIED_KEY], list)\n\ndef test_deleted_ids_sorted_and_exact():\n    data = load_output()\n    assert data[DELETED_KEY] == sorted(data[DELETED_KEY])\n    assert set(data[DELETED_KEY]) == set(EXPECTED[DELETED_KEY]), \"Deleted IDs must match\"\n    for item_id in data[DELETED_KEY]:\n        assert ID_PATTERN.fullmatch(item_id), f\"Invalid ID format: {item_id}\"\n\ndef test_modified_entries_schema_and_sort():\n    data = load_output()\n    expected_keys = {\"id\", \"field\", \"old_value\", \"new_value\"}\n    assert data[MODIFIED_KEY] == sorted(data[MODIFIED_KEY], key=lambda item: (item[\"id\"], item[\"field\"]))\n    for item in data[MODIFIED_KEY]:\n        assert set(item.keys()) == expected_keys\n        assert ID_PATTERN.fullmatch(item[\"id\"]), \"Invalid ID format: \" + item[\"id\"]\n\ndef test_modified_entries_exact_match():\n    data = load_output()\n    ok, msg = diff_close(data[MODIFIED_KEY], EXPECTED[MODIFIED_KEY])\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 1,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages --no-cache-dir     numpy==2.1.3     openpyxl==3.1.5     pandas==2.2.3     pdfplumber==0.11.4     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY data/ /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "data\\cloud_service_portfolio_archive.pdf",
+          "data\\cloud_service_portfolio_current.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Cross-Format-Data-Reconciliation\\01-cloud-service-portfolio-diff\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "task-engineer@meituan.com",
+            "difficulty": "easy",
+            "category": "cloud-finops",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "reconciliation",
+              "cloud-operations",
+              "diff"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-18624d81b4cdcd67"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "02-hospital-capacity-portfolio-diff",
+      "category": "Cross-Format-Data-Reconciliation",
+      "family_id": "Cross-Format-Data-Reconciliation",
+      "description": "You are assisting a regional hospital planning office in reconciling an archived PDF snapshot against the latest workbook.\n\nThe archived snapshot is stored in PDF format at `/root/hospital_capacity_archive.pdf`.\nThe current operational dataset is stored in Excel format at `/root/hospital_capacity_current.xlsx`.\n\nYour task is to:\n\n1. Extract the full table from the archived PDF.\n2. Compare it against the current Excel file using `ID` as the primary key.\n3. Detect:\n   - which IDs were removed from the current dataset,\n   - which records were modified (include `id`, `field`, `old_value`, and `new_value`).\n\nWrite the final result to `/root/hospital_capacity_diff_report.json` in the following JSON format:\n\n```json\n{\n  \"closed_departments\": [\n    \"HCP0006\",\n    \"HCP0009\"\n  ],\n  \"updated_departments\": [\n    {\n      \"id\": \"HCP0001\",\n      \"field\": \"Capacity2024\",\n      \"old_value\": 9284,\n      \"new_value\": 9420\n    }\n  ]\n}\n```\n\nNotes:\n- The PDF contains the older baseline snapshot.\n- The Excel file contains the newer current snapshot.\n- ID values must match pattern `^HCP\\d{4}$`.\n- Numeric fields (`Capacity2019`, `Capacity2024`, `FiveYearCAGR`) must be output as numbers.\n- Text fields must be output as strings.\n- If a record has multiple changed fields, emit one object per field.\n- Sort both `closed_departments` and `updated_departments` by ID for deterministic output.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Tests for 02-hospital-capacity-portfolio-diff.\"\"\"\n\nimport json\nimport re\nfrom pathlib import Path\n\nimport pytest\n\n\ndef diff_close(actual, expected, tol=0.01):\n    \"\"\"Compare diff JSON with numeric tolerance for old_value/new_value.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch\"\n        for k in expected:\n            ok, msg = diff_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = diff_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric: {actual} vs {expected}\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"Text: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value: {actual} vs {expected}\"\n        return True, \"\"\n\nOUTPUT_FILE = Path(\"/root/hospital_capacity_diff_report.json\")\nDELETED_KEY = \"closed_departments\"\nMODIFIED_KEY = \"updated_departments\"\nID_PATTERN = re.compile(r\"^HCP\\d{4}$\")\nEXPECTED = {\n  \"closed_departments\": [\n    \"HCP0006\",\n    \"HCP0009\"\n  ],\n  \"updated_departments\": [\n    {\n      \"id\": \"HCP0001\",\n      \"field\": \"Capacity2024\",\n      \"old_value\": 9284,\n      \"new_value\": 9420\n    },\n    {\n      \"id\": \"HCP0004\",\n      \"field\": \"Department\",\n      \"old_value\": \"Oncology\",\n      \"new_value\": \"Oncology Center\"\n    },\n    {\n      \"id\": \"HCP0005\",\n      \"field\": \"FiveYearCAGR\",\n      \"old_value\": -0.81,\n      \"new_value\": -0.35\n    },\n    {\n      \"id\": \"HCP0007\",\n      \"field\": \"Campus\",\n      \"old_value\": \"West Campus\",\n      \"new_value\": \"North Imaging Hub\"\n    }\n  ]\n}\n\ndef load_output():\n    assert OUTPUT_FILE.exists(), f\"Output file not found at {OUTPUT_FILE}\"\n    try:\n        return json.loads(OUTPUT_FILE.read_text(encoding=\"utf-8\"))\n    except json.JSONDecodeError as exc:\n        pytest.fail(f\"Output is not valid JSON: {exc}\")\n\ndef test_output_shape():\n    data = load_output()\n    assert set(data.keys()) == {DELETED_KEY, MODIFIED_KEY}\n    assert isinstance(data[DELETED_KEY], list)\n    assert isinstance(data[MODIFIED_KEY], list)\n\ndef test_deleted_ids_sorted_and_exact():\n    data = load_output()\n    assert data[DELETED_KEY] == sorted(data[DELETED_KEY])\n    assert set(data[DELETED_KEY]) == set(EXPECTED[DELETED_KEY]), \"Deleted IDs must match\"\n    for item_id in data[DELETED_KEY]:\n        assert ID_PATTERN.fullmatch(item_id), f\"Invalid ID format: {item_id}\"\n\ndef test_modified_entries_schema_and_sort():\n    data = load_output()\n    expected_keys = {\"id\", \"field\", \"old_value\", \"new_value\"}\n    assert data[MODIFIED_KEY] == sorted(data[MODIFIED_KEY], key=lambda item: (item[\"id\"], item[\"field\"]))\n    for item in data[MODIFIED_KEY]:\n        assert set(item.keys()) == expected_keys\n        assert ID_PATTERN.fullmatch(item[\"id\"]), \"Invalid ID format: \" + item[\"id\"]\n\ndef test_modified_entries_exact_match():\n    data = load_output()\n    ok, msg = diff_close(data[MODIFIED_KEY], EXPECTED[MODIFIED_KEY])\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 2,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages --no-cache-dir     numpy==2.1.3     openpyxl==3.1.5     pandas==2.2.3     pdfplumber==0.11.4     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY data/ /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "data\\hospital_capacity_archive.pdf",
+          "data\\hospital_capacity_current.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Cross-Format-Data-Reconciliation\\02-hospital-capacity-portfolio-diff\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "task-engineer@meituan.com",
+            "difficulty": "easy",
+            "category": "hospital-operations",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "reconciliation",
+              "healthcare",
+              "diff"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-970faa48fe7cf7ff"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "03-retail-supply-category-diff",
+      "category": "Cross-Format-Data-Reconciliation",
+      "family_id": "Cross-Format-Data-Reconciliation",
+      "description": "You are assisting a retail supply planning team in reconciling an archived PDF snapshot against the latest workbook.\n\nThe archived snapshot is stored in PDF format at `/root/retail_supply_archive.pdf`.\nThe current operational dataset is stored in Excel format at `/root/retail_supply_current.xlsx`.\n\nYour task is to:\n\n1. Extract the full table from the archived PDF.\n2. Compare it against the current Excel file using `ID` as the primary key.\n3. Detect:\n   - which IDs were removed from the current dataset,\n   - which records were modified (include `id`, `field`, `old_value`, and `new_value`).\n\nWrite the final result to `/root/retail_supply_diff_report.json` in the following JSON format:\n\n```json\n{\n  \"dropped_categories\": [\n    \"RTL0006\",\n    \"RTL0008\"\n  ],\n  \"adjusted_categories\": [\n    {\n      \"id\": \"RTL0001\",\n      \"field\": \"Spend2024K\",\n      \"old_value\": 10972,\n      \"new_value\": 11105\n    }\n  ]\n}\n```\n\nNotes:\n- The PDF contains the older baseline snapshot.\n- The Excel file contains the newer current snapshot.\n- ID values must match pattern `^RTL\\d{4}$`.\n- Numeric fields (`Spend2019K`, `Spend2024K`, `FiveYearCAGR`) must be output as numbers.\n- Text fields must be output as strings.\n- If a record has multiple changed fields, emit one object per field.\n- Sort both `dropped_categories` and `adjusted_categories` by ID for deterministic output.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Tests for 03-retail-supply-category-diff.\"\"\"\n\nimport json\nimport re\nfrom pathlib import Path\n\nimport pytest\n\n\ndef diff_close(actual, expected, tol=0.01):\n    \"\"\"Compare diff JSON with numeric tolerance for old_value/new_value.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch\"\n        for k in expected:\n            ok, msg = diff_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = diff_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric: {actual} vs {expected}\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"Text: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value: {actual} vs {expected}\"\n        return True, \"\"\n\nOUTPUT_FILE = Path(\"/root/retail_supply_diff_report.json\")\nDELETED_KEY = \"dropped_categories\"\nMODIFIED_KEY = \"adjusted_categories\"\nID_PATTERN = re.compile(r\"^RTL\\d{4}$\")\nEXPECTED = {\n  \"dropped_categories\": [\n    \"RTL0006\",\n    \"RTL0008\"\n  ],\n  \"adjusted_categories\": [\n    {\n      \"id\": \"RTL0001\",\n      \"field\": \"Spend2024K\",\n      \"old_value\": 10972,\n      \"new_value\": 11105\n    },\n    {\n      \"id\": \"RTL0003\",\n      \"field\": \"Category\",\n      \"old_value\": \"Meat\",\n      \"new_value\": \"Protein\"\n    },\n    {\n      \"id\": \"RTL0005\",\n      \"field\": \"FiveYearCAGR\",\n      \"old_value\": -0.81,\n      \"new_value\": -0.22\n    },\n    {\n      \"id\": \"RTL0007\",\n      \"field\": \"Planner\",\n      \"old_value\": \"Ops Cell G\",\n      \"new_value\": \"Ops Cell D\"\n    }\n  ]\n}\n\ndef load_output():\n    assert OUTPUT_FILE.exists(), f\"Output file not found at {OUTPUT_FILE}\"\n    try:\n        return json.loads(OUTPUT_FILE.read_text(encoding=\"utf-8\"))\n    except json.JSONDecodeError as exc:\n        pytest.fail(f\"Output is not valid JSON: {exc}\")\n\ndef test_output_shape():\n    data = load_output()\n    assert set(data.keys()) == {DELETED_KEY, MODIFIED_KEY}\n    assert isinstance(data[DELETED_KEY], list)\n    assert isinstance(data[MODIFIED_KEY], list)\n\ndef test_deleted_ids_sorted_and_exact():\n    data = load_output()\n    assert data[DELETED_KEY] == sorted(data[DELETED_KEY])\n    assert set(data[DELETED_KEY]) == set(EXPECTED[DELETED_KEY]), \"Deleted IDs must match\"\n    for item_id in data[DELETED_KEY]:\n        assert ID_PATTERN.fullmatch(item_id), f\"Invalid ID format: {item_id}\"\n\ndef test_modified_entries_schema_and_sort():\n    data = load_output()\n    expected_keys = {\"id\", \"field\", \"old_value\", \"new_value\"}\n    assert data[MODIFIED_KEY] == sorted(data[MODIFIED_KEY], key=lambda item: (item[\"id\"], item[\"field\"]))\n    for item in data[MODIFIED_KEY]:\n        assert set(item.keys()) == expected_keys\n        assert ID_PATTERN.fullmatch(item[\"id\"]), \"Invalid ID format: \" + item[\"id\"]\n\ndef test_modified_entries_exact_match():\n    data = load_output()\n    ok, msg = diff_close(data[MODIFIED_KEY], EXPECTED[MODIFIED_KEY])\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 3,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages --no-cache-dir     numpy==2.1.3     openpyxl==3.1.5     pandas==2.2.3     pdfplumber==0.11.4     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY data/ /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "data\\retail_supply_archive.pdf",
+          "data\\retail_supply_current.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Cross-Format-Data-Reconciliation\\03-retail-supply-category-diff\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "task-engineer@meituan.com",
+            "difficulty": "medium",
+            "category": "retail-operations",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "reconciliation",
+              "retail",
+              "diff"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-d61f7a82a971c107"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "04-university-program-funding-diff",
+      "category": "Cross-Format-Data-Reconciliation",
+      "family_id": "Cross-Format-Data-Reconciliation",
+      "description": "You are assisting a university budgeting office in reconciling an archived PDF snapshot against the latest workbook.\n\nThe archived snapshot is stored in PDF format at `/root/university_funding_archive.pdf`.\nThe current operational dataset is stored in Excel format at `/root/university_funding_current.xlsx`.\n\nYour task is to:\n\n1. Extract the full table from the archived PDF.\n2. Compare it against the current Excel file using `ID` as the primary key.\n3. Detect:\n   - which IDs were removed from the current dataset,\n   - which records were modified (include `id`, `field`, `old_value`, and `new_value`).\n\nWrite the final result to `/root/university_funding_diff_report.json` in the following JSON format:\n\n```json\n{\n  \"retired_schools\": [\n    \"UNI0006\",\n    \"UNI0008\"\n  ],\n  \"revised_schools\": [\n    {\n      \"id\": \"UNI0001\",\n      \"field\": \"Funding2024K\",\n      \"old_value\": 7596,\n      \"new_value\": 7710\n    }\n  ]\n}\n```\n\nNotes:\n- The PDF contains the older baseline snapshot.\n- The Excel file contains the newer current snapshot.\n- ID values must match pattern `^UNI\\d{4}$`.\n- Numeric fields (`Funding2019K`, `Funding2024K`, `FiveYearCAGR`) must be output as numbers.\n- Text fields must be output as strings.\n- If a record has multiple changed fields, emit one object per field.\n- Sort both `retired_schools` and `revised_schools` by ID for deterministic output.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Tests for 04-university-program-funding-diff.\"\"\"\n\nimport json\nimport re\nfrom pathlib import Path\n\nimport pytest\n\n\ndef diff_close(actual, expected, tol=0.01):\n    \"\"\"Compare diff JSON with numeric tolerance for old_value/new_value.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch\"\n        for k in expected:\n            ok, msg = diff_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = diff_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric: {actual} vs {expected}\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"Text: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value: {actual} vs {expected}\"\n        return True, \"\"\n\nOUTPUT_FILE = Path(\"/root/university_funding_diff_report.json\")\nDELETED_KEY = \"retired_schools\"\nMODIFIED_KEY = \"revised_schools\"\nID_PATTERN = re.compile(r\"^UNI\\d{4}$\")\nEXPECTED = {\n  \"retired_schools\": [\n    \"UNI0006\",\n    \"UNI0008\"\n  ],\n  \"revised_schools\": [\n    {\n      \"id\": \"UNI0001\",\n      \"field\": \"Funding2024K\",\n      \"old_value\": 7596,\n      \"new_value\": 7710\n    },\n    {\n      \"id\": \"UNI0004\",\n      \"field\": \"Dean\",\n      \"old_value\": \"Dr. Naomi Patel\",\n      \"new_value\": \"Prof. Naomi Patel\"\n    },\n    {\n      \"id\": \"UNI0005\",\n      \"field\": \"FiveYearCAGR\",\n      \"old_value\": -0.81,\n      \"new_value\": -0.12\n    },\n    {\n      \"id\": \"UNI0007\",\n      \"field\": \"School\",\n      \"old_value\": \"Social Sciences\",\n      \"new_value\": \"Social Impact Studies\"\n    }\n  ]\n}\n\ndef load_output():\n    assert OUTPUT_FILE.exists(), f\"Output file not found at {OUTPUT_FILE}\"\n    try:\n        return json.loads(OUTPUT_FILE.read_text(encoding=\"utf-8\"))\n    except json.JSONDecodeError as exc:\n        pytest.fail(f\"Output is not valid JSON: {exc}\")\n\ndef test_output_shape():\n    data = load_output()\n    assert set(data.keys()) == {DELETED_KEY, MODIFIED_KEY}\n    assert isinstance(data[DELETED_KEY], list)\n    assert isinstance(data[MODIFIED_KEY], list)\n\ndef test_deleted_ids_sorted_and_exact():\n    data = load_output()\n    assert data[DELETED_KEY] == sorted(data[DELETED_KEY])\n    assert set(data[DELETED_KEY]) == set(EXPECTED[DELETED_KEY]), \"Deleted IDs must match\"\n    for item_id in data[DELETED_KEY]:\n        assert ID_PATTERN.fullmatch(item_id), f\"Invalid ID format: {item_id}\"\n\ndef test_modified_entries_schema_and_sort():\n    data = load_output()\n    expected_keys = {\"id\", \"field\", \"old_value\", \"new_value\"}\n    assert data[MODIFIED_KEY] == sorted(data[MODIFIED_KEY], key=lambda item: (item[\"id\"], item[\"field\"]))\n    for item in data[MODIFIED_KEY]:\n        assert set(item.keys()) == expected_keys\n        assert ID_PATTERN.fullmatch(item[\"id\"]), \"Invalid ID format: \" + item[\"id\"]\n\ndef test_modified_entries_exact_match():\n    data = load_output()\n    ok, msg = diff_close(data[MODIFIED_KEY], EXPECTED[MODIFIED_KEY])\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 4,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages --no-cache-dir     numpy==2.1.3     openpyxl==3.1.5     pandas==2.2.3     pdfplumber==0.11.4     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY data/ /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "data\\university_funding_archive.pdf",
+          "data\\university_funding_current.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Cross-Format-Data-Reconciliation\\04-university-program-funding-diff\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "task-engineer@meituan.com",
+            "difficulty": "medium",
+            "category": "education-operations",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "reconciliation",
+              "education",
+              "diff"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-1d7be3d8e6616dc5"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "05-datacenter-hardware-registry-diff",
+      "category": "Cross-Format-Data-Reconciliation",
+      "family_id": "Cross-Format-Data-Reconciliation",
+      "description": "You are assisting infrastructure operations in reconciling an archived PDF snapshot against the latest workbook.\n\nThe archived snapshot is stored in PDF format at `/root/hardware_registry_q1.pdf`.\nThe current operational dataset is stored in Excel format at `/root/hardware_registry_q2.xlsx`.\n\nYour task is to:\n\n1. Extract the full table from the archived PDF.\n2. Compare it against the current Excel file using `ID` as the primary key.\n3. Detect:\n   - which IDs were removed from the current dataset,\n   - which records were modified (include `id`, `field`, `old_value`, and `new_value`).\n\nWrite the final result to `/root/hardware_diff_report.json` in the following JSON format:\n\n```json\n{\n  \"decommissioned_servers\": [\n    \"SVR0007\",\n    \"SVR0055\"\n  ],\n  \"updated_servers\": [\n    {\n      \"id\": \"SVR0014\",\n      \"field\": \"CPUCores\",\n      \"old_value\": 16,\n      \"new_value\": 32\n    }\n  ]\n}\n```\n\nNotes:\n- The PDF contains the older baseline snapshot.\n- The Excel file contains the newer current snapshot.\n- ID values must match pattern `^SVR\\d{4}$`.\n- Numeric fields (`CPUCores`) must be output as numbers.\n- Text fields must be output as strings.\n- If a record has multiple changed fields, emit one object per field.\n- Sort both `decommissioned_servers` and `updated_servers` by ID for deterministic output.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Tests for 05-datacenter-hardware-registry-diff.\"\"\"\n\nimport json\nimport re\nfrom pathlib import Path\n\nimport pytest\n\n\ndef diff_close(actual, expected, tol=0.01):\n    \"\"\"Compare diff JSON with numeric tolerance for old_value/new_value.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch\"\n        for k in expected:\n            ok, msg = diff_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = diff_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric: {actual} vs {expected}\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"Text: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value: {actual} vs {expected}\"\n        return True, \"\"\n\nOUTPUT_FILE = Path(\"/root/hardware_diff_report.json\")\nDELETED_KEY = \"decommissioned_servers\"\nMODIFIED_KEY = \"updated_servers\"\nID_PATTERN = re.compile(r\"^SVR\\d{4}$\")\nEXPECTED = {\n  \"decommissioned_servers\": [\n    \"SVR0007\",\n    \"SVR0055\",\n    \"SVR0088\",\n    \"SVR0111\"\n  ],\n  \"updated_servers\": [\n    {\n      \"id\": \"SVR0014\",\n      \"field\": \"CPUCores\",\n      \"old_value\": 16,\n      \"new_value\": 32\n    },\n    {\n      \"id\": \"SVR0042\",\n      \"field\": \"Firmware\",\n      \"old_value\": \"v3.9.0\",\n      \"new_value\": \"v4.0.1\"\n    },\n    {\n      \"id\": \"SVR0070\",\n      \"field\": \"Rack\",\n      \"old_value\": \"R11-U01\",\n      \"new_value\": \"R21-U18\"\n    },\n    {\n      \"id\": \"SVR0099\",\n      \"field\": \"Role\",\n      \"old_value\": \"queue\",\n      \"new_value\": \"analytics\"\n    }\n  ]\n}\n\ndef load_output():\n    assert OUTPUT_FILE.exists(), f\"Output file not found at {OUTPUT_FILE}\"\n    try:\n        return json.loads(OUTPUT_FILE.read_text(encoding=\"utf-8\"))\n    except json.JSONDecodeError as exc:\n        pytest.fail(f\"Output is not valid JSON: {exc}\")\n\ndef test_output_shape():\n    data = load_output()\n    assert set(data.keys()) == {DELETED_KEY, MODIFIED_KEY}\n    assert isinstance(data[DELETED_KEY], list)\n    assert isinstance(data[MODIFIED_KEY], list)\n\ndef test_deleted_ids_sorted_and_exact():\n    data = load_output()\n    assert data[DELETED_KEY] == sorted(data[DELETED_KEY])\n    assert set(data[DELETED_KEY]) == set(EXPECTED[DELETED_KEY]), \"Deleted IDs must match\"\n    for item_id in data[DELETED_KEY]:\n        assert ID_PATTERN.fullmatch(item_id), f\"Invalid ID format: {item_id}\"\n\ndef test_modified_entries_schema_and_sort():\n    data = load_output()\n    expected_keys = {\"id\", \"field\", \"old_value\", \"new_value\"}\n    assert data[MODIFIED_KEY] == sorted(data[MODIFIED_KEY], key=lambda item: (item[\"id\"], item[\"field\"]))\n    for item in data[MODIFIED_KEY]:\n        assert set(item.keys()) == expected_keys\n        assert ID_PATTERN.fullmatch(item[\"id\"]), \"Invalid ID format: \" + item[\"id\"]\n\ndef test_modified_entries_exact_match():\n    data = load_output()\n    ok, msg = diff_close(data[MODIFIED_KEY], EXPECTED[MODIFIED_KEY])\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 5,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages --no-cache-dir     numpy==2.1.3     openpyxl==3.1.5     pandas==2.2.3     pdfplumber==0.11.4     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY data/ /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "data\\hardware_registry_q1.pdf",
+          "data\\hardware_registry_q2.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Cross-Format-Data-Reconciliation\\05-datacenter-hardware-registry-diff\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "task-engineer@meituan.com",
+            "difficulty": "medium",
+            "category": "it-operations",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "asset-audit",
+              "infrastructure",
+              "diff"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-15ac3b6c22897c78"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "06-hospital-medication-reconciliation",
+      "category": "Cross-Format-Data-Reconciliation",
+      "family_id": "Cross-Format-Data-Reconciliation",
+      "description": "You are assisting a hospital pharmacy team in reconciling an archived PDF snapshot against the latest workbook.\n\nThe archived snapshot is stored in PDF format at `/root/medications_archive.pdf`.\nThe current operational dataset is stored in Excel format at `/root/medications_live.xlsx`.\n\nYour task is to:\n\n1. Extract the full table from the archived PDF.\n2. Compare it against the current Excel file using `ID` as the primary key.\n3. Detect:\n   - which IDs were removed from the current dataset,\n   - which records were modified (include `id`, `field`, `old_value`, and `new_value`).\n\nWrite the final result to `/root/medication_diff_report.json` in the following JSON format:\n\n```json\n{\n  \"deleted_medications\": [\n    \"MED00012\",\n    \"MED00044\"\n  ],\n  \"modified_medications\": [\n    {\n      \"id\": \"MED00017\",\n      \"field\": \"StockUnits\",\n      \"old_value\": 213,\n      \"new_value\": 195\n    }\n  ]\n}\n```\n\nNotes:\n- The PDF contains the older baseline snapshot.\n- The Excel file contains the newer current snapshot.\n- ID values must match pattern `^MED\\d{5}$`.\n- Numeric fields (`StockUnits`, `ReorderLevel`) must be output as numbers.\n- Text fields must be output as strings.\n- If a record has multiple changed fields, emit one object per field.\n- Sort both `deleted_medications` and `modified_medications` by ID for deterministic output.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Tests for 06-hospital-medication-reconciliation.\"\"\"\n\nimport json\nimport re\nfrom pathlib import Path\n\nimport pytest\n\n\ndef diff_close(actual, expected, tol=0.01):\n    \"\"\"Compare diff JSON with numeric tolerance for old_value/new_value.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch\"\n        for k in expected:\n            ok, msg = diff_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = diff_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric: {actual} vs {expected}\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"Text: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value: {actual} vs {expected}\"\n        return True, \"\"\n\nOUTPUT_FILE = Path(\"/root/medication_diff_report.json\")\nDELETED_KEY = \"deleted_medications\"\nMODIFIED_KEY = \"modified_medications\"\nID_PATTERN = re.compile(r\"^MED\\d{5}$\")\nEXPECTED = {\n  \"deleted_medications\": [\n    \"MED00012\",\n    \"MED00044\",\n    \"MED00087\",\n    \"MED00103\"\n  ],\n  \"modified_medications\": [\n    {\n      \"id\": \"MED00017\",\n      \"field\": \"StockUnits\",\n      \"old_value\": 213,\n      \"new_value\": 195\n    },\n    {\n      \"id\": \"MED00033\",\n      \"field\": \"Form\",\n      \"old_value\": \"Capsule\",\n      \"new_value\": \"Liquid\"\n    },\n    {\n      \"id\": \"MED00058\",\n      \"field\": \"ReorderLevel\",\n      \"old_value\": 28,\n      \"new_value\": 38\n    },\n    {\n      \"id\": \"MED00091\",\n      \"field\": \"Medication\",\n      \"old_value\": \"Lisinopril\",\n      \"new_value\": \"Metformin XR\"\n    }\n  ]\n}\n\ndef load_output():\n    assert OUTPUT_FILE.exists(), f\"Output file not found at {OUTPUT_FILE}\"\n    try:\n        return json.loads(OUTPUT_FILE.read_text(encoding=\"utf-8\"))\n    except json.JSONDecodeError as exc:\n        pytest.fail(f\"Output is not valid JSON: {exc}\")\n\ndef test_output_shape():\n    data = load_output()\n    assert set(data.keys()) == {DELETED_KEY, MODIFIED_KEY}\n    assert isinstance(data[DELETED_KEY], list)\n    assert isinstance(data[MODIFIED_KEY], list)\n\ndef test_deleted_ids_sorted_and_exact():\n    data = load_output()\n    assert data[DELETED_KEY] == sorted(data[DELETED_KEY])\n    assert set(data[DELETED_KEY]) == set(EXPECTED[DELETED_KEY]), \"Deleted IDs must match\"\n    for item_id in data[DELETED_KEY]:\n        assert ID_PATTERN.fullmatch(item_id), f\"Invalid ID format: {item_id}\"\n\ndef test_modified_entries_schema_and_sort():\n    data = load_output()\n    expected_keys = {\"id\", \"field\", \"old_value\", \"new_value\"}\n    assert data[MODIFIED_KEY] == sorted(data[MODIFIED_KEY], key=lambda item: (item[\"id\"], item[\"field\"]))\n    for item in data[MODIFIED_KEY]:\n        assert set(item.keys()) == expected_keys\n        assert ID_PATTERN.fullmatch(item[\"id\"]), \"Invalid ID format: \" + item[\"id\"]\n\ndef test_modified_entries_exact_match():\n    data = load_output()\n    ok, msg = diff_close(data[MODIFIED_KEY], EXPECTED[MODIFIED_KEY])\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 6,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages --no-cache-dir     numpy==2.1.3     openpyxl==3.1.5     pandas==2.2.3     pdfplumber==0.11.4     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY data/ /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "data\\medications_archive.pdf",
+          "data\\medications_live.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Cross-Format-Data-Reconciliation\\06-hospital-medication-reconciliation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "task-engineer@meituan.com",
+            "difficulty": "medium",
+            "category": "hospital-operations",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "pharmacy",
+              "inventory",
+              "diff"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-498d459e5c8d9047"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "07-shipping-container-manifest-diff",
+      "category": "Cross-Format-Data-Reconciliation",
+      "family_id": "Cross-Format-Data-Reconciliation",
+      "description": "You are assisting a port operations team in reconciling an archived PDF snapshot against the latest workbook.\n\nThe archived snapshot is stored in PDF format at `/root/container_manifest_old.pdf`.\nThe current operational dataset is stored in Excel format at `/root/container_manifest_current.xlsx`.\n\nYour task is to:\n\n1. Extract the full table from the archived PDF.\n2. Compare it against the current Excel file using `ID` as the primary key.\n3. Detect:\n   - which IDs were removed from the current dataset,\n   - which records were modified (include `id`, `field`, `old_value`, and `new_value`).\n\nWrite the final result to `/root/container_diff_report.json` in the following JSON format:\n\n```json\n{\n  \"missing_containers\": [\n    \"CNT0009\",\n    \"CNT0063\"\n  ],\n  \"changed_containers\": [\n    {\n      \"id\": \"CNT0018\",\n      \"field\": \"WeightTons\",\n      \"old_value\": 45.8,\n      \"new_value\": 44.2\n    }\n  ]\n}\n```\n\nNotes:\n- The PDF contains the older baseline snapshot.\n- The Excel file contains the newer current snapshot.\n- ID values must match pattern `^CNT\\d{4}$`.\n- Numeric fields (`WeightTons`) must be output as numbers.\n- Text fields must be output as strings.\n- If a record has multiple changed fields, emit one object per field.\n- Sort both `missing_containers` and `changed_containers` by ID for deterministic output.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Tests for 07-shipping-container-manifest-diff.\"\"\"\n\nimport json\nimport re\nfrom pathlib import Path\n\nimport pytest\n\n\ndef diff_close(actual, expected, tol=0.01):\n    \"\"\"Compare diff JSON with numeric tolerance for old_value/new_value.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch\"\n        for k in expected:\n            ok, msg = diff_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = diff_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric: {actual} vs {expected}\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"Text: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value: {actual} vs {expected}\"\n        return True, \"\"\n\nOUTPUT_FILE = Path(\"/root/container_diff_report.json\")\nDELETED_KEY = \"missing_containers\"\nMODIFIED_KEY = \"changed_containers\"\nID_PATTERN = re.compile(r\"^CNT\\d{4}$\")\nEXPECTED = {\n  \"missing_containers\": [\n    \"CNT0009\",\n    \"CNT0063\",\n    \"CNT0105\",\n    \"CNT0136\"\n  ],\n  \"changed_containers\": [\n    {\n      \"id\": \"CNT0018\",\n      \"field\": \"WeightTons\",\n      \"old_value\": 45.8,\n      \"new_value\": 44.2\n    },\n    {\n      \"id\": \"CNT0040\",\n      \"field\": \"Status\",\n      \"old_value\": \"Loaded\",\n      \"new_value\": \"InspectionHold\"\n    },\n    {\n      \"id\": \"CNT0077\",\n      \"field\": \"Route\",\n      \"old_value\": \"PUS->SEA\",\n      \"new_value\": \"DXB->MUM\"\n    },\n    {\n      \"id\": \"CNT0110\",\n      \"field\": \"CargoType\",\n      \"old_value\": \"AutoParts\",\n      \"new_value\": \"MedicalSupplies\"\n    }\n  ]\n}\n\ndef load_output():\n    assert OUTPUT_FILE.exists(), f\"Output file not found at {OUTPUT_FILE}\"\n    try:\n        return json.loads(OUTPUT_FILE.read_text(encoding=\"utf-8\"))\n    except json.JSONDecodeError as exc:\n        pytest.fail(f\"Output is not valid JSON: {exc}\")\n\ndef test_output_shape():\n    data = load_output()\n    assert set(data.keys()) == {DELETED_KEY, MODIFIED_KEY}\n    assert isinstance(data[DELETED_KEY], list)\n    assert isinstance(data[MODIFIED_KEY], list)\n\ndef test_deleted_ids_sorted_and_exact():\n    data = load_output()\n    assert data[DELETED_KEY] == sorted(data[DELETED_KEY])\n    assert set(data[DELETED_KEY]) == set(EXPECTED[DELETED_KEY]), \"Deleted IDs must match\"\n    for item_id in data[DELETED_KEY]:\n        assert ID_PATTERN.fullmatch(item_id), f\"Invalid ID format: {item_id}\"\n\ndef test_modified_entries_schema_and_sort():\n    data = load_output()\n    expected_keys = {\"id\", \"field\", \"old_value\", \"new_value\"}\n    assert data[MODIFIED_KEY] == sorted(data[MODIFIED_KEY], key=lambda item: (item[\"id\"], item[\"field\"]))\n    for item in data[MODIFIED_KEY]:\n        assert set(item.keys()) == expected_keys\n        assert ID_PATTERN.fullmatch(item[\"id\"]), \"Invalid ID format: \" + item[\"id\"]\n\ndef test_modified_entries_exact_match():\n    data = load_output()\n    ok, msg = diff_close(data[MODIFIED_KEY], EXPECTED[MODIFIED_KEY])\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 7,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages --no-cache-dir     numpy==2.1.3     openpyxl==3.1.5     pandas==2.2.3     pdfplumber==0.11.4     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY data/ /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "data\\container_manifest_current.xlsx",
+          "data\\container_manifest_old.pdf"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Cross-Format-Data-Reconciliation\\07-shipping-container-manifest-diff\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "task-engineer@meituan.com",
+            "difficulty": "hard",
+            "category": "logistics",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "shipping",
+              "manifest",
+              "diff"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-6fdb4b4d518ae6b1"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "08-university-course-catalog-diff",
+      "category": "Cross-Format-Data-Reconciliation",
+      "family_id": "Cross-Format-Data-Reconciliation",
+      "description": "You are assisting an academic affairs office in reconciling an archived PDF snapshot against the latest workbook.\n\nThe archived snapshot is stored in PDF format at `/root/course_catalog_2024.pdf`.\nThe current operational dataset is stored in Excel format at `/root/course_catalog_2025.xlsx`.\n\nYour task is to:\n\n1. Extract the full table from the archived PDF.\n2. Compare it against the current Excel file using `ID` as the primary key.\n3. Detect:\n   - which IDs were removed from the current dataset,\n   - which records were modified (include `id`, `field`, `old_value`, and `new_value`).\n\nWrite the final result to `/root/course_diff_report.json` in the following JSON format:\n\n```json\n{\n  \"removed_courses\": [\n    \"CRS0004\",\n    \"CRS0049\"\n  ],\n  \"revised_courses\": [\n    {\n      \"id\": \"CRS0035\",\n      \"field\": \"Instructor\",\n      \"old_value\": \"Dr. Chen\",\n      \"new_value\": \"Prof. Elena Torres\"\n    }\n  ]\n}\n```\n\nNotes:\n- The PDF contains the older baseline snapshot.\n- The Excel file contains the newer current snapshot.\n- ID values must match pattern `^CRS\\d{4}$`.\n- Numeric fields (`Credits`) must be output as numbers.\n- Text fields must be output as strings.\n- If a record has multiple changed fields, emit one object per field.\n- Sort both `removed_courses` and `revised_courses` by ID for deterministic output.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Tests for 08-university-course-catalog-diff.\"\"\"\n\nimport json\nimport re\nfrom pathlib import Path\n\nimport pytest\n\n\ndef diff_close(actual, expected, tol=0.01):\n    \"\"\"Compare diff JSON with numeric tolerance for old_value/new_value.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch\"\n        for k in expected:\n            ok, msg = diff_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = diff_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric: {actual} vs {expected}\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"Text: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value: {actual} vs {expected}\"\n        return True, \"\"\n\nOUTPUT_FILE = Path(\"/root/course_diff_report.json\")\nDELETED_KEY = \"removed_courses\"\nMODIFIED_KEY = \"revised_courses\"\nID_PATTERN = re.compile(r\"^CRS\\d{4}$\")\nEXPECTED = {\n  \"removed_courses\": [\n    \"CRS0004\",\n    \"CRS0049\",\n    \"CRS0093\",\n    \"CRS0127\"\n  ],\n  \"revised_courses\": [\n    {\n      \"id\": \"CRS0035\",\n      \"field\": \"Instructor\",\n      \"old_value\": \"Dr. Chen\",\n      \"new_value\": \"Prof. Elena Torres\"\n    },\n    {\n      \"id\": \"CRS0068\",\n      \"field\": \"Department\",\n      \"old_value\": \"LifeScience\",\n      \"new_value\": \"DataScience\"\n    },\n    {\n      \"id\": \"CRS0102\",\n      \"field\": \"Course\",\n      \"old_value\": \"Data Systems 122\",\n      \"new_value\": \"Computational Ethics Lab\"\n    }\n  ]\n}\n\ndef load_output():\n    assert OUTPUT_FILE.exists(), f\"Output file not found at {OUTPUT_FILE}\"\n    try:\n        return json.loads(OUTPUT_FILE.read_text(encoding=\"utf-8\"))\n    except json.JSONDecodeError as exc:\n        pytest.fail(f\"Output is not valid JSON: {exc}\")\n\ndef test_output_shape():\n    data = load_output()\n    assert set(data.keys()) == {DELETED_KEY, MODIFIED_KEY}\n    assert isinstance(data[DELETED_KEY], list)\n    assert isinstance(data[MODIFIED_KEY], list)\n\ndef test_deleted_ids_sorted_and_exact():\n    data = load_output()\n    assert data[DELETED_KEY] == sorted(data[DELETED_KEY])\n    assert set(data[DELETED_KEY]) == set(EXPECTED[DELETED_KEY]), \"Deleted IDs must match\"\n    for item_id in data[DELETED_KEY]:\n        assert ID_PATTERN.fullmatch(item_id), f\"Invalid ID format: {item_id}\"\n\ndef test_modified_entries_schema_and_sort():\n    data = load_output()\n    expected_keys = {\"id\", \"field\", \"old_value\", \"new_value\"}\n    assert data[MODIFIED_KEY] == sorted(data[MODIFIED_KEY], key=lambda item: (item[\"id\"], item[\"field\"]))\n    for item in data[MODIFIED_KEY]:\n        assert set(item.keys()) == expected_keys\n        assert ID_PATTERN.fullmatch(item[\"id\"]), \"Invalid ID format: \" + item[\"id\"]\n\ndef test_modified_entries_exact_match():\n    data = load_output()\n    ok, msg = diff_close(data[MODIFIED_KEY], EXPECTED[MODIFIED_KEY])\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 8,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages --no-cache-dir     numpy==2.1.3     openpyxl==3.1.5     pandas==2.2.3     pdfplumber==0.11.4     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY data/ /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "data\\course_catalog_2024.pdf",
+          "data\\course_catalog_2025.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Cross-Format-Data-Reconciliation\\08-university-course-catalog-diff\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "task-engineer@meituan.com",
+            "difficulty": "hard",
+            "category": "education-operations",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "course-catalog",
+              "registry",
+              "diff"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-c4e89b93091145d3"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    }
+  ]
+}

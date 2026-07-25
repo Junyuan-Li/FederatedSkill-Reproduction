@@ -1,0 +1,69 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Ablation A2: Global Shared Library (non-personalized)
+#
+# 论文 Section 6 Ablation Study (Table 4)：
+#   A2: 替换个性化技能库 → 全局共享技能库。
+#   所有 worker 共享同一个 library，Stage2 不再为每个 worker 独立演化。
+#   等价于 merger_mode="shared"（与 merger_mode="unshared" 对比）。
+#
+# 结论：全局共享库因 backbone 风格不匹配导致 SR 降低（论文 Table 4 第3行），
+# 验证 per-worker personalized evolution 的价值。
+# ──────────────────────────────────────────────────────────────────────────────
+
+setting_name: "Ablation_A2_Global_Library"
+description: "A2 ablation: global shared library instead of per-worker personalized libraries"
+federated: true
+
+rounds: 8
+seed: 42
+sampler: "random"
+output_dir: "results/ablation_a2_global_library"
+
+# 消融：全局共享技能库（merger_mode=shared vs 正式的 merger_mode=unshared）
+ablation:
+  disable_personalization: true    # Stage2 不再按 worker profile 个性化演化
+  merge_policy: "reward_weighted"  # 仍使用 reward-weighted merge（只是不个性化）
+  # merger_mode 实质为 shared — 所有 worker 读写同一个 library
+  # 对比基线: setting_full_hetero.yaml
+
+server:
+  backbone_model: "glm-5"
+  model_provider: "dashscope"
+  api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+  api_key_env: "DASHSCOPE_KEY"
+  merger_max_tokens: 16384
+
+merger_mode: "shared"              # KEY ABLATION: shared vs unshared
+isolated_worker_skills: false      # 共享库不隔离
+sync_schedule: "every_task"
+
+patcher:
+  temperature: 0.2
+
+workers:
+  - client_id: "u0"
+    backbone_model: "qwen3.6-plus"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "DASHSCOPE_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u1"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "DASHSCOPE_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u2"
+    backbone_model: "kimi-k2.5"
+    agent_harness: "claude-code"
+    model_provider: "moonshot"
+    api_base: "https://api.moonshot.ai/anthropic"
+    api_key_env: "MOONSHOT_KEY"
+    max_context_tokens: 131072
+    is_moonshot: true

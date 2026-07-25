@@ -1,0 +1,67 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Setting 0: Base Agent / No-Evolution Baseline
+#
+# Full Reproduction Alignment Audit TASK7（Experiment Protocol Complete
+# Alignment）：
+#
+#   论文动机（Paper motivation）：论文 Section 5.1 / Table 1 在报告 SE / FS
+#   等演化设置的成功率之前，需要一个"完全不演化"的 Base Agent 下界作为对照
+#   —— 即 worker 反复用同一个初始 skill library（通常为空）求解任务，既不
+#   本地蒸馏 patch（无 Stage client-side g_i），也不存在服务器 Stage1/Stage2
+#   （federated=false 时 Stage1/Stage2 本就不会运行）。没有这条基线，SE/FS
+#   的成功率提升幅度就缺乏可比较的起点。
+#
+#   现状不一致（Current mismatch）：仓库中 setting_se.yaml（Setting1 SE）已
+#   经会跑 patch 蒸馏 + 本地技能库持续增长，setting_homo_fed.yaml 等
+#   （Setting2-4）都带服务器演化。此前没有任何配置文件对应"完全不演化"的
+#   Base Agent 下界。
+#
+#   代码改动（Code change）：**不需要新增/修改任何 Python 代码**——
+#   `experiments/baseline.py::SelfEvolutionRunner` 已有
+#   `disable_patch_distillation` 构造参数，为 True 时会跳过
+#   `client.distill_patch(trajectory)`，用一个空 `WorkerPatch` 代替（技能库
+#   永不被写入）；`experiments/run_experiment.py` 已支持顶层
+#   `disable_patch_distillation: true` 字段解析（见 `_run_family_loop` 之前
+#   的 Ablation flags 解析段落）。因此只需新增本配置文件：
+#     federated: false                  → 不经过服务器 Stage1/Stage2
+#     disable_patch_distillation: true  → client 侧也不蒸馏/写入技能库
+#   两者叠加 = worker 从头到尾使用同一份初始（空）技能库反复求解任务，即
+#   论文所需的 Base Agent / No-Evolution 基线。
+# ──────────────────────────────────────────────────────────────────────────────
+
+setting_name: "Base_Agent_No_Evolution"
+description: |
+  Setting 0: Base Agent / No-Evolution baseline (TASK7).
+  Same single worker (qwen3.6-plus) and same 20-family benchmark as
+  setting_se.yaml, but patch distillation is disabled and there is no
+  federation — the skill library never changes across rounds. Used as the
+  lower-bound reference point for SE / FS success-rate comparisons in
+  Table 1.
+federated: false
+disable_patch_distillation: true
+
+rounds: 8
+seed: 42
+sampler: "family_curriculum"
+loop_over_families: true
+rounds_per_family_mode: "family_length"
+paper_benchmark_only: true
+output_dir: "results/setting0_base_agent"
+
+# patcher 配置保留（与 setting_se.yaml 对齐），但 disable_patch_distillation
+# 为 true 时 PatchDistiller 根本不会被调用，本段仅为文档一致性保留。
+patcher:
+  temperature: 0.2
+
+# Single worker — 与 setting_se.yaml 使用相同的 worker，确保 Base Agent 与
+# SE 基线之间除"是否演化"外的其余变量（backbone/harness/任务集合/轮数/种子）
+# 完全一致，是可比较的对照实验。
+workers:
+  - client_id: "u0"
+    backbone_model: "qwen3.6-plus"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "DASHSCOPE_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false

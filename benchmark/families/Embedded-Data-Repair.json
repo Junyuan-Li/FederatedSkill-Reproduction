@@ -1,0 +1,523 @@
+{
+  "family_id": "Embedded-Data-Repair",
+  "description": "真实 SkillFlow family: Embedded-Data-Repair（8 个递增难度任务）",
+  "skill_name": "Embedded-Data-Repair",
+  "tasks": [
+    {
+      "task_id": "fx-spot-matrix-refresh",
+      "category": "Embedded-Data-Repair",
+      "family_id": "Embedded-Data-Repair",
+      "description": "You are updating `/root/input.pptx`, a treasury review slide with an embedded Excel spot-rate grid.\n\nNote: PowerPoint files are structured as ZIP archives containing XML markup. Some text operations may be easier by accessing the underlying XML directly.\n\nThe slide note contains one final cross-rate correction. Read that note, update the embedded workbook, preserve formula cells as formulas, and save the updated presentation to `/root/results.pptx`.\n\nRequirements:\n- Only change the live embedded Excel workbook inside the PPTX.\n- Keep formula cells as formulas; do not replace them with hardcoded numbers.\n- Let the reciprocal rate update through the workbook logic.\n- Leave all other workbook values and presentation contents unchanged.\n- Write the final file exactly to `/root/results.pptx`.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport os\nimport tempfile\nimport zipfile\n\nfrom openpyxl import load_workbook\n\nRESULT_FILE = \"/root/results.pptx\"\nINPUT_FILE = \"/root/input.pptx\"\nEMBEDDED_EXCEL = \"ppt/embeddings/Microsoft_Excel_Worksheet.xlsx\"\nSHEET_NAME = 'Spot Grid'\nHEADER_ROW = 1\nROW_LABEL_COL = 1\nFROM_TOKEN = 'GBP'\nTO_TOKEN = 'EUR'\nEXPECTED_RATE = 1.159\nUNCHANGED_SHEETS = []\n\n\ndef normalize(text):\n    return ''.join(ch.lower() for ch in str(text) if ch.isalnum())\n\n\ndef token_matches(value, token):\n    if value is None:\n        return False\n    return normalize(token) in normalize(value)\n\n\ndef extract_embedded_excel_path(pptx_path):\n    with zipfile.ZipFile(pptx_path, 'r') as zf:\n        payload = zf.read(EMBEDDED_EXCEL)\n    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:\n        tmp.write(payload)\n        return tmp.name\n\n\ndef load_workbook_from_pptx(pptx_path, data_only):\n    temp_path = extract_embedded_excel_path(pptx_path)\n    wb = load_workbook(temp_path, data_only=data_only)\n    return wb, temp_path\n\n\ndef find_pair_cells(ws, from_token, to_token):\n    row_map = {\n        row: ws.cell(row=row, column=ROW_LABEL_COL).value\n        for row in range(HEADER_ROW + 1, ws.max_row + 1)\n        if ws.cell(row=row, column=ROW_LABEL_COL).value not in (None, '')\n    }\n    col_map = {\n        col: ws.cell(row=HEADER_ROW, column=col).value\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1)\n        if ws.cell(row=HEADER_ROW, column=col).value not in (None, '')\n    }\n    from_row = next(row for row, value in row_map.items() if token_matches(value, from_token))\n    to_row = next(row for row, value in row_map.items() if token_matches(value, to_token))\n    from_col = next(col for col, value in col_map.items() if token_matches(value, from_token))\n    to_col = next(col for col, value in col_map.items() if token_matches(value, to_token))\n    return (from_row, to_col), (to_row, from_col)\n\n\ndef get_sheet_matrix_values(ws):\n    values = {}\n    for row in range(HEADER_ROW + 1, ws.max_row + 1):\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1):\n            values[(row, col)] = ws.cell(row=row, column=col).value\n    return values\n\n\ndef is_formula(value):\n    return isinstance(value, str) and value.startswith('=')\n\n\ndef assert_same(lhs, rhs, coord):\n    if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):\n        assert abs(lhs - rhs) < 1e-6, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n    else:\n        lhs_s = str(lhs).strip() if lhs is not None else None\n        rhs_s = str(rhs).strip() if rhs is not None else None\n        assert lhs_s == rhs_s, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n\n\ndef test_output_file_exists():\n    assert os.path.exists(RESULT_FILE), 'results.pptx was not created'\n\n\ndef test_output_is_valid_pptx():\n    assert zipfile.is_zipfile(RESULT_FILE), 'results.pptx is not a valid PPTX archive'\n    with zipfile.ZipFile(RESULT_FILE, 'r') as zf:\n        assert EMBEDDED_EXCEL in zf.namelist(), 'Embedded workbook is missing from the output'\n\n\ndef test_target_rate_and_inverse_are_updated():\n    wb, temp_path = load_workbook_from_pptx(RESULT_FILE, data_only=True)\n    try:\n        ws = wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair_cells(ws, FROM_TOKEN, TO_TOKEN)\n        direct_value = ws.cell(*direct_coord).value\n        inverse_value = ws.cell(*inverse_coord).value\n        assert direct_value is not None, f'Direct rate cell is empty (no cached value)'\n        assert abs(direct_value - EXPECTED_RATE) < 1e-4, (\n            f'Direct rate was not updated correctly: expected {EXPECTED_RATE}, got {direct_value}'\n        )\n        # 双通路验证：先尝试缓存值，若为 None 则回退到公式语义检查\n        if inverse_value is not None:\n            assert abs(inverse_value - (1.0 / EXPECTED_RATE)) < 1e-3, (\n                f'Inverse rate was not updated correctly: expected {1.0 / EXPECTED_RATE}, got {inverse_value}'\n            )\n        else:\n            # 缓存值为空，回退到公式语义检查\n            wb.close()\n            os.unlink(temp_path)\n            wb, temp_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n            ws = wb[SHEET_NAME]\n            inverse_formula = ws.cell(*inverse_coord).value\n            assert is_formula(inverse_formula), (\n                f'Inverse rate cell is neither a cached value nor a formula: {inverse_formula}'\n            )\n            # 检查公式是否包含对直接值单元格的正确引用（1/Dxx 或类似结构）\n            import re\n            direct_cell = ws.cell(*direct_coord).coordinate\n            norm_formula = str(inverse_formula).replace(' ', '').replace('$', '').upper()\n            # 允许 1/直接单元格 或 ROUND(1/直接单元格) 等变体\n            pattern = rf'(ROUND\\()?1/{direct_cell}(,\\d+)?\\)?'\n            assert re.search(pattern, norm_formula), (\n                f'Inverse formula does not reference the direct rate cell correctly: {inverse_formula}'\n            )\n    finally:\n        wb.close()\n        os.unlink(temp_path)\n\n\ndef test_formula_cells_preserved():\n    input_wb, input_path = load_workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_formulas = {}\n        output_formulas = {}\n        for sheet_name in input_wb.sheetnames:\n            input_ws = input_wb[sheet_name]\n            output_ws = output_wb[sheet_name]\n            for row in range(1, input_ws.max_row + 1):\n                for col in range(1, input_ws.max_column + 1):\n                    coord = input_ws.cell(row=row, column=col).coordinate\n                    input_value = input_ws.cell(row=row, column=col).value\n                    output_value = output_ws.cell(row=row, column=col).value\n                    if is_formula(input_value):\n                        input_formulas[(sheet_name, coord)] = input_value\n                    if is_formula(output_value):\n                        output_formulas[(sheet_name, coord)] = output_value\n        # Normalize formulas for comparison (case-insensitive, remove spaces and $)\n        _input_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in input_formulas.items()}\n        _output_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in output_formulas.items()}\n        assert _input_norm == _output_norm, 'Formula cells changed or were replaced with values'\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n\ndef test_other_values_and_unchanged_sheets_stay_put():\n    input_wb, input_path = load_workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_ws = input_wb[SHEET_NAME]\n        output_ws = output_wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair_cells(output_ws, FROM_TOKEN, TO_TOKEN)\n        input_values = get_sheet_matrix_values(input_ws)\n        output_values = get_sheet_matrix_values(output_ws)\n        for coord, input_value in input_values.items():\n            if coord in {direct_coord, inverse_coord}:\n                continue\n            assert_same(input_value, output_values[coord], coord)\n        for sheet_name in UNCHANGED_SHEETS:\n            input_sheet = input_wb[sheet_name]\n            output_sheet = output_wb[sheet_name]\n            max_row = max(input_sheet.max_row, output_sheet.max_row)\n            max_col = max(input_sheet.max_column, output_sheet.max_column)\n            for row in range(1, max_row + 1):\n                for col in range(1, max_col + 1):\n                    coord = input_sheet.cell(row=row, column=col).coordinate\n                    assert_same(input_sheet.cell(row=row, column=col).value, output_sheet.cell(row=row, column=col).value, f'{sheet_name}!{coord}')\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 1,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3-pip     libreoffice     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5     defusedxml==0.7.1\n\nWORKDIR /root\nCOPY input.pptx /root/input.pptx\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "input.pptx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Embedded-Data-Repair\\fx-spot-matrix-refresh\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@meituan.com",
+            "difficulty": "medium",
+            "category": "Office Operation",
+            "tags": [
+              "pptx",
+              "xlsx",
+              "embedded-workbook",
+              "formula-preservation"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 900.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-1891e130a6db15bb"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "fx-cross-rate-inverse-fix",
+      "category": "Embedded-Data-Repair",
+      "family_id": "Embedded-Data-Repair",
+      "description": "You are fixing `/root/input.pptx`, an investor board slide with an embedded Excel FX matrix.\n\nNote: PowerPoint files are structured as ZIP archives containing XML markup. Some text operations may be easier by accessing the underlying XML directly.\n\nThe slide note contains one final cross-rate correction. Read that note, update the embedded workbook, preserve formula cells as formulas, and save the corrected presentation to `/root/results.pptx`.\n\nRequirements:\n- Only change the live embedded Excel workbook inside the PPTX.\n- Keep formula cells as formulas; do not replace them with hardcoded numbers.\n- If the noted direction is formula-driven in the workbook, update the corresponding writable input cell so the reciprocal still recalculates correctly.\n- Leave all other workbook values and presentation contents unchanged.\n- Write the final file exactly to `/root/results.pptx`.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport os\nimport tempfile\nimport zipfile\n\nfrom openpyxl import load_workbook\n\nRESULT_FILE = \"/root/results.pptx\"\nINPUT_FILE = \"/root/input.pptx\"\nEMBEDDED_EXCEL = \"ppt/embeddings/Microsoft_Excel_Worksheet.xlsx\"\nSHEET_NAME = 'FX Matrix'\nHEADER_ROW = 1\nROW_LABEL_COL = 1\nFROM_TOKEN = 'EUR'\nTO_TOKEN = 'GBP'\nEXPECTED_RATE = 0.8645\nUNCHANGED_SHEETS = []\n\n\ndef normalize(text):\n    return ''.join(ch.lower() for ch in str(text) if ch.isalnum())\n\n\ndef token_matches(value, token):\n    if value is None:\n        return False\n    return normalize(token) in normalize(value)\n\n\ndef extract_embedded_excel_path(pptx_path):\n    with zipfile.ZipFile(pptx_path, 'r') as zf:\n        payload = zf.read(EMBEDDED_EXCEL)\n    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:\n        tmp.write(payload)\n        return tmp.name\n\n\ndef load_workbook_from_pptx(pptx_path, data_only):\n    temp_path = extract_embedded_excel_path(pptx_path)\n    wb = load_workbook(temp_path, data_only=data_only)\n    return wb, temp_path\n\n\ndef find_pair_cells(ws, from_token, to_token):\n    row_map = {\n        row: ws.cell(row=row, column=ROW_LABEL_COL).value\n        for row in range(HEADER_ROW + 1, ws.max_row + 1)\n        if ws.cell(row=row, column=ROW_LABEL_COL).value not in (None, '')\n    }\n    col_map = {\n        col: ws.cell(row=HEADER_ROW, column=col).value\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1)\n        if ws.cell(row=HEADER_ROW, column=col).value not in (None, '')\n    }\n    from_row = next(row for row, value in row_map.items() if token_matches(value, from_token))\n    to_row = next(row for row, value in row_map.items() if token_matches(value, to_token))\n    from_col = next(col for col, value in col_map.items() if token_matches(value, from_token))\n    to_col = next(col for col, value in col_map.items() if token_matches(value, to_token))\n    return (from_row, to_col), (to_row, from_col)\n\n\ndef get_sheet_matrix_values(ws):\n    values = {}\n    for row in range(HEADER_ROW + 1, ws.max_row + 1):\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1):\n            values[(row, col)] = ws.cell(row=row, column=col).value\n    return values\n\n\ndef is_formula(value):\n    return isinstance(value, str) and value.startswith('=')\n\n\ndef assert_same(lhs, rhs, coord):\n    if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):\n        assert abs(lhs - rhs) < 1e-6, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n    else:\n        lhs_s = str(lhs).strip() if lhs is not None else None\n        rhs_s = str(rhs).strip() if rhs is not None else None\n        assert lhs_s == rhs_s, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n\n\ndef test_output_file_exists():\n    assert os.path.exists(RESULT_FILE), 'results.pptx was not created'\n\n\ndef test_output_is_valid_pptx():\n    assert zipfile.is_zipfile(RESULT_FILE), 'results.pptx is not a valid PPTX archive'\n    with zipfile.ZipFile(RESULT_FILE, 'r') as zf:\n        assert EMBEDDED_EXCEL in zf.namelist(), 'Embedded workbook is missing from the output'\n\n\ndef test_target_rate_and_inverse_are_updated():\n    wb, temp_path = load_workbook_from_pptx(RESULT_FILE, data_only=True)\n    try:\n        ws = wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair_cells(ws, FROM_TOKEN, TO_TOKEN)\n        direct_value = ws.cell(*direct_coord).value\n        inverse_value = ws.cell(*inverse_coord).value\n        assert direct_value is not None, f'Direct rate cell is empty (no cached value)'\n        assert abs(direct_value - EXPECTED_RATE) < 1e-4, (\n            f'Direct rate was not updated correctly: expected {EXPECTED_RATE}, got {direct_value}'\n        )\n        # 双通路验证：先尝试缓存值，若为 None 则回退到公式语义检查\n        if inverse_value is not None:\n            assert abs(inverse_value - (1.0 / EXPECTED_RATE)) < 1e-3, (\n                f'Inverse rate was not updated correctly: expected {1.0 / EXPECTED_RATE}, got {inverse_value}'\n            )\n        else:\n            # 缓存值为空，回退到公式语义检查\n            wb.close()\n            os.unlink(temp_path)\n            wb, temp_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n            ws = wb[SHEET_NAME]\n            inverse_formula = ws.cell(*inverse_coord).value\n            assert is_formula(inverse_formula), (\n                f'Inverse rate cell is neither a cached value nor a formula: {inverse_formula}'\n            )\n            # 检查公式是否包含对直接值单元格的正确引用（1/Dxx 或类似结构）\n            import re\n            direct_cell = ws.cell(*direct_coord).coordinate\n            norm_formula = str(inverse_formula).replace(' ', '').replace('$', '').upper()\n            # 允许 1/直接单元格 或 ROUND(1/直接单元格) 等变体\n            pattern = rf'(ROUND\\()?1/{direct_cell}(,\\d+)?\\)?'\n            assert re.search(pattern, norm_formula), (\n                f'Inverse formula does not reference the direct rate cell correctly: {inverse_formula}'\n            )\n    finally:\n        wb.close()\n        os.unlink(temp_path)\n\n\ndef test_formula_cells_preserved():\n    input_wb, input_path = load_workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_formulas = {}\n        output_formulas = {}\n        for sheet_name in input_wb.sheetnames:\n            input_ws = input_wb[sheet_name]\n            output_ws = output_wb[sheet_name]\n            for row in range(1, input_ws.max_row + 1):\n                for col in range(1, input_ws.max_column + 1):\n                    coord = input_ws.cell(row=row, column=col).coordinate\n                    input_value = input_ws.cell(row=row, column=col).value\n                    output_value = output_ws.cell(row=row, column=col).value\n                    if is_formula(input_value):\n                        input_formulas[(sheet_name, coord)] = input_value\n                    if is_formula(output_value):\n                        output_formulas[(sheet_name, coord)] = output_value\n        # Normalize formulas for comparison (case-insensitive, remove spaces and $)\n        _input_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in input_formulas.items()}\n        _output_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in output_formulas.items()}\n        assert _input_norm == _output_norm, 'Formula cells changed or were replaced with values'\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n\ndef test_other_values_and_unchanged_sheets_stay_put():\n    input_wb, input_path = load_workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_ws = input_wb[SHEET_NAME]\n        output_ws = output_wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair_cells(output_ws, FROM_TOKEN, TO_TOKEN)\n        input_values = get_sheet_matrix_values(input_ws)\n        output_values = get_sheet_matrix_values(output_ws)\n        for coord, input_value in input_values.items():\n            if coord in {direct_coord, inverse_coord}:\n                continue\n            assert_same(input_value, output_values[coord], coord)\n        for sheet_name in UNCHANGED_SHEETS:\n            input_sheet = input_wb[sheet_name]\n            output_sheet = output_wb[sheet_name]\n            max_row = max(input_sheet.max_row, output_sheet.max_row)\n            max_col = max(input_sheet.max_column, output_sheet.max_column)\n            for row in range(1, max_row + 1):\n                for col in range(1, max_col + 1):\n                    coord = input_sheet.cell(row=row, column=col).coordinate\n                    assert_same(input_sheet.cell(row=row, column=col).value, output_sheet.cell(row=row, column=col).value, f'{sheet_name}!{coord}')\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 2,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3-pip     libreoffice     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5     defusedxml==0.7.1\n\nWORKDIR /root\nCOPY input.pptx /root/input.pptx\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "input.pptx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Embedded-Data-Repair\\fx-cross-rate-inverse-fix\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@meituan.com",
+            "difficulty": "medium",
+            "category": "Office Operation",
+            "tags": [
+              "pptx",
+              "xlsx",
+              "embedded-workbook",
+              "formula-preservation"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 900.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-f1ad590388396c50"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "warehouse-slot-factor-refresh",
+      "category": "Embedded-Data-Repair",
+      "family_id": "Embedded-Data-Repair",
+      "description": "You are updating `/root/input.pptx`, an operations slide with an embedded Excel slot-factor grid.\n\nThe slide note contains one final slot-factor correction. Read that note, update the embedded workbook, preserve formula cells as formulas, and save the corrected presentation to `/root/results.pptx`.\n\nRequirements:\n- Only change the live embedded Excel workbook inside the PPTX.\n- The slot-factor matrix starts after the title area in the worksheet; leave the title area unchanged.\n- Keep formula cells as formulas; do not replace them with hardcoded numbers.\n- Let the reciprocal factor update through the workbook logic.\n- Leave all other workbook values and presentation contents unchanged.\n- Write the final file exactly to `/root/results.pptx`.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport os\nimport tempfile\nimport zipfile\n\nfrom openpyxl import load_workbook\n\nRESULT_FILE = \"/root/results.pptx\"\nINPUT_FILE = \"/root/input.pptx\"\nTARGET_EMBEDDING = 'Microsoft_Excel_Worksheet.xlsx'\nSHEET_NAME = 'Slot Factors'\nHEADER_ROW = 2\nROW_LABEL_COL = 3\nFROM_TOKEN = 'cart'\nTO_TOKEN = 'bay'\nEXPECTED_RATE = 0.5\nUNCHANGED_SHEETS = []\nARCHIVE_EMBEDDINGS = []\n\n\ndef normalize(text):\n    return ''.join(ch.lower() for ch in str(text) if ch.isalnum())\n\n\ndef token_matches(value, token):\n    return value is not None and normalize(token) in normalize(value)\n\n\ndef extract_embedding_bytes(pptx_path, embedding_name):\n    with zipfile.ZipFile(pptx_path, 'r') as zf:\n        return zf.read(f'ppt/embeddings/{embedding_name}')\n\n\ndef workbook_from_embedding(pptx_path, embedding_name, data_only):\n    payload = extract_embedding_bytes(pptx_path, embedding_name)\n    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:\n        tmp.write(payload)\n        temp_path = tmp.name\n    wb = load_workbook(temp_path, data_only=data_only)\n    return wb, temp_path\n\n\ndef find_pair(ws, from_token, to_token):\n    row_map = {\n        row: ws.cell(row=row, column=ROW_LABEL_COL).value\n        for row in range(HEADER_ROW + 1, ws.max_row + 1)\n        if ws.cell(row=row, column=ROW_LABEL_COL).value not in (None, '')\n    }\n    col_map = {\n        col: ws.cell(row=HEADER_ROW, column=col).value\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1)\n        if ws.cell(row=HEADER_ROW, column=col).value not in (None, '')\n    }\n    from_row = next(row for row, value in row_map.items() if token_matches(value, from_token))\n    to_row = next(row for row, value in row_map.items() if token_matches(value, to_token))\n    from_col = next(col for col, value in col_map.items() if token_matches(value, from_token))\n    to_col = next(col for col, value in col_map.items() if token_matches(value, to_token))\n    return (from_row, to_col), (to_row, from_col)\n\n\ndef all_matrix_values(ws):\n    values = {}\n    for row in range(HEADER_ROW + 1, ws.max_row + 1):\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1):\n            values[(row, col)] = ws.cell(row=row, column=col).value\n    return values\n\n\ndef is_formula(value):\n    return isinstance(value, str) and value.startswith('=')\n\n\ndef assert_same(lhs, rhs, coord):\n    if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):\n        assert abs(lhs - rhs) < 1e-6, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n    else:\n        lhs_s = str(lhs).strip() if lhs is not None else None\n        rhs_s = str(rhs).strip() if rhs is not None else None\n        assert lhs_s == rhs_s, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n\n\ndef test_output_exists_and_contains_target_embedding():\n    assert os.path.exists(RESULT_FILE), 'results.pptx was not created'\n    assert zipfile.is_zipfile(RESULT_FILE), 'results.pptx is not a valid PPTX archive'\n    with zipfile.ZipFile(RESULT_FILE, 'r') as zf:\n        assert f'ppt/embeddings/{TARGET_EMBEDDING}' in zf.namelist(), 'Target embedding is missing from the output'\n\n\ndef test_target_pair_updated():\n    wb, temp_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=True)\n    try:\n        ws = wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair(ws, FROM_TOKEN, TO_TOKEN)\n        direct_value = ws.cell(*direct_coord).value\n        inverse_value = ws.cell(*inverse_coord).value\n        assert direct_value is not None, f'Direct rate cell is empty (no cached value)'\n        assert abs(direct_value - EXPECTED_RATE) < 1e-4, f'Expected {EXPECTED_RATE}, got {direct_value}'\n        # 双通路验证：先尝试缓存值，若为 None 则回退到公式语义检查\n        if inverse_value is not None:\n            assert abs(inverse_value - (1.0 / EXPECTED_RATE)) < 1e-3, f'Expected {1.0 / EXPECTED_RATE}, got {inverse_value}'\n        else:\n            # 缓存值为空，回退到公式语义检查\n            wb.close()\n            os.unlink(temp_path)\n            wb, temp_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=False)\n            ws = wb[SHEET_NAME]\n            inverse_formula = ws.cell(*inverse_coord).value\n            assert is_formula(inverse_formula), (\n                f'Inverse rate cell is neither a cached value nor a formula: {inverse_formula}'\n            )\n            # 检查公式是否包含对直接值单元格的正确引用（1/Dxx 或类似结构）\n            import re\n            direct_cell = ws.cell(*direct_coord).coordinate\n            norm_formula = str(inverse_formula).replace(' ', '').replace('$', '').upper()\n            # 允许 1/直接单元格 或 ROUND(1/直接单元格) 等变体\n            pattern = rf'(ROUND\\()?1/{direct_cell}(,\\d+)?\\)?'\n            assert re.search(pattern, norm_formula), (\n                f'Inverse formula does not reference the direct rate cell correctly: {inverse_formula}'\n            )\n    finally:\n        wb.close()\n        os.unlink(temp_path)\n\n\ndef test_formula_cells_preserved_in_target_embedding():\n    input_wb, input_path = workbook_from_embedding(INPUT_FILE, TARGET_EMBEDDING, data_only=False)\n    output_wb, output_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=False)\n    try:\n        input_formulas = {}\n        output_formulas = {}\n        for sheet_name in input_wb.sheetnames:\n            input_ws = input_wb[sheet_name]\n            output_ws = output_wb[sheet_name]\n            for row in range(1, input_ws.max_row + 1):\n                for col in range(1, input_ws.max_column + 1):\n                    coord = input_ws.cell(row=row, column=col).coordinate\n                    input_value = input_ws.cell(row=row, column=col).value\n                    output_value = output_ws.cell(row=row, column=col).value\n                    if is_formula(input_value):\n                        input_formulas[(sheet_name, coord)] = input_value\n                    if is_formula(output_value):\n                        output_formulas[(sheet_name, coord)] = output_value\n        # Normalize formulas for comparison (case-insensitive, remove spaces and $)\n        _input_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in input_formulas.items()}\n        _output_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in output_formulas.items()}\n        assert _input_norm == _output_norm, 'Formula cells changed or were replaced with values'\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n\ndef test_other_values_and_archive_embeddings_unchanged():\n    input_wb, input_path = workbook_from_embedding(INPUT_FILE, TARGET_EMBEDDING, data_only=True)\n    output_wb, output_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=True)\n    try:\n        input_ws = input_wb[SHEET_NAME]\n        output_ws = output_wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair(output_ws, FROM_TOKEN, TO_TOKEN)\n        input_values = all_matrix_values(input_ws)\n        output_values = all_matrix_values(output_ws)\n        for coord, input_value in input_values.items():\n            if coord in {direct_coord, inverse_coord}:\n                continue\n            assert_same(input_value, output_values[coord], coord)\n        for sheet_name in UNCHANGED_SHEETS:\n            in_sheet = input_wb[sheet_name]\n            out_sheet = output_wb[sheet_name]\n            max_row = max(in_sheet.max_row, out_sheet.max_row)\n            max_col = max(in_sheet.max_column, out_sheet.max_column)\n            for row in range(1, max_row + 1):\n                for col in range(1, max_col + 1):\n                    coord = in_sheet.cell(row=row, column=col).coordinate\n                    assert_same(in_sheet.cell(row=row, column=col).value, out_sheet.cell(row=row, column=col).value, f'{sheet_name}!{coord}')\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n    for embedding_name in ARCHIVE_EMBEDDINGS:\n        assert extract_embedding_bytes(INPUT_FILE, embedding_name) == extract_embedding_bytes(RESULT_FILE, embedding_name), (\n            f'Archive embedding {embedding_name} should be unchanged'\n        )\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 3,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y \\\n    python3-pip \\\n    libreoffice \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest==8.4.1 \\\n    pytest-json-ctrf==0.3.5 \\\n    openpyxl==3.1.5 \\\n    defusedxml==0.7.1\n\nWORKDIR /root\nCOPY input.pptx /root/input.pptx\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "input.pptx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Embedded-Data-Repair\\warehouse-slot-factor-refresh\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@meituan.com",
+            "difficulty": "medium",
+            "category": "Office Operation",
+            "tags": [
+              "pptx",
+              "xlsx",
+              "embedded-workbook",
+              "formula-preservation"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 900.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-44a34be943eb7f35"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "supplier-pack-matrix-refresh",
+      "category": "Embedded-Data-Repair",
+      "family_id": "Embedded-Data-Repair",
+      "description": "You are fixing `/root/input.pptx`, a procurement slide with an embedded Excel packaging-conversion workbook.\n\nThe slide note includes one archived conversion and one final live correction. Update only the live pack matrix in the embedded workbook, ignore any note marked archived, preserve formula cells as formulas, and save the corrected presentation to `/root/results.pptx`.\n\nRequirements:\n- The embedded workbook has more than one sheet; only the live pack matrix sheet should change.\n- Keep formula cells as formulas; do not replace them with hardcoded numbers.\n- Let the reciprocal conversion update through the workbook logic.\n- Leave all other workbook values, other sheets, and presentation contents unchanged.\n- Write the final file exactly to `/root/results.pptx`.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport os\nimport tempfile\nimport zipfile\n\nfrom openpyxl import load_workbook\n\nRESULT_FILE = \"/root/results.pptx\"\nINPUT_FILE = \"/root/input.pptx\"\nEMBEDDED_EXCEL = \"ppt/embeddings/Microsoft_Excel_Worksheet.xlsx\"\nSHEET_NAME = 'Live Pack Matrix'\nHEADER_ROW = 3\nROW_LABEL_COL = 2\nFROM_TOKEN = 'crate'\nTO_TOKEN = 'pallet'\nEXPECTED_RATE = 0.4\nUNCHANGED_SHEETS = ['Readme']\n\n\ndef normalize(text):\n    return ''.join(ch.lower() for ch in str(text) if ch.isalnum())\n\n\ndef token_matches(value, token):\n    if value is None:\n        return False\n    return normalize(token) in normalize(value)\n\n\ndef extract_embedded_excel_path(pptx_path):\n    with zipfile.ZipFile(pptx_path, 'r') as zf:\n        payload = zf.read(EMBEDDED_EXCEL)\n    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:\n        tmp.write(payload)\n        return tmp.name\n\n\ndef load_workbook_from_pptx(pptx_path, data_only):\n    temp_path = extract_embedded_excel_path(pptx_path)\n    wb = load_workbook(temp_path, data_only=data_only)\n    return wb, temp_path\n\n\ndef find_pair_cells(ws, from_token, to_token):\n    row_map = {\n        row: ws.cell(row=row, column=ROW_LABEL_COL).value\n        for row in range(HEADER_ROW + 1, ws.max_row + 1)\n        if ws.cell(row=row, column=ROW_LABEL_COL).value not in (None, '')\n    }\n    col_map = {\n        col: ws.cell(row=HEADER_ROW, column=col).value\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1)\n        if ws.cell(row=HEADER_ROW, column=col).value not in (None, '')\n    }\n    from_row = next(row for row, value in row_map.items() if token_matches(value, from_token))\n    to_row = next(row for row, value in row_map.items() if token_matches(value, to_token))\n    from_col = next(col for col, value in col_map.items() if token_matches(value, from_token))\n    to_col = next(col for col, value in col_map.items() if token_matches(value, to_token))\n    return (from_row, to_col), (to_row, from_col)\n\n\ndef get_sheet_matrix_values(ws):\n    values = {}\n    for row in range(HEADER_ROW + 1, ws.max_row + 1):\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1):\n            values[(row, col)] = ws.cell(row=row, column=col).value\n    return values\n\n\ndef is_formula(value):\n    return isinstance(value, str) and value.startswith('=')\n\n\ndef assert_same(lhs, rhs, coord):\n    if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):\n        assert abs(lhs - rhs) < 1e-6, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n    else:\n        lhs_s = str(lhs).strip() if lhs is not None else None\n        rhs_s = str(rhs).strip() if rhs is not None else None\n        assert lhs_s == rhs_s, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n\n\ndef test_output_file_exists():\n    assert os.path.exists(RESULT_FILE), 'results.pptx was not created'\n\n\ndef test_output_is_valid_pptx():\n    assert zipfile.is_zipfile(RESULT_FILE), 'results.pptx is not a valid PPTX archive'\n    with zipfile.ZipFile(RESULT_FILE, 'r') as zf:\n        assert EMBEDDED_EXCEL in zf.namelist(), 'Embedded workbook is missing from the output'\n\n\ndef test_target_rate_and_inverse_are_updated():\n    wb, temp_path = load_workbook_from_pptx(RESULT_FILE, data_only=True)\n    try:\n        ws = wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair_cells(ws, FROM_TOKEN, TO_TOKEN)\n        direct_value = ws.cell(*direct_coord).value\n        inverse_value = ws.cell(*inverse_coord).value\n        assert direct_value is not None, f'Direct rate cell is empty (no cached value)'\n        assert abs(direct_value - EXPECTED_RATE) < 1e-4, (\n            f'Direct rate was not updated correctly: expected {EXPECTED_RATE}, got {direct_value}'\n        )\n        # 双通路验证：先尝试缓存值，若为 None 则回退到公式语义检查\n        if inverse_value is not None:\n            assert abs(inverse_value - (1.0 / EXPECTED_RATE)) < 1e-3, (\n                f'Inverse rate was not updated correctly: expected {1.0 / EXPECTED_RATE}, got {inverse_value}'\n            )\n        else:\n            # 缓存值为空，回退到公式语义检查\n            wb.close()\n            os.unlink(temp_path)\n            wb, temp_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n            ws = wb[SHEET_NAME]\n            inverse_formula = ws.cell(*inverse_coord).value\n            assert is_formula(inverse_formula), (\n                f'Inverse rate cell is neither a cached value nor a formula: {inverse_formula}'\n            )\n            # 检查公式是否包含对直接值单元格的正确引用（1/Dxx 或类似结构）\n            import re\n            direct_cell = ws.cell(*direct_coord).coordinate\n            norm_formula = str(inverse_formula).replace(' ', '').replace('$', '').upper()\n            # 允许 1/直接单元格 或 ROUND(1/直接单元格) 等变体\n            pattern = rf'(ROUND\\()?1/{direct_cell}(,\\d+)?\\)?'\n            assert re.search(pattern, norm_formula), (\n                f'Inverse formula does not reference the direct rate cell correctly: {inverse_formula}'\n            )\n    finally:\n        wb.close()\n        os.unlink(temp_path)\n\n\ndef test_formula_cells_preserved():\n    input_wb, input_path = load_workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_formulas = {}\n        output_formulas = {}\n        for sheet_name in input_wb.sheetnames:\n            input_ws = input_wb[sheet_name]\n            output_ws = output_wb[sheet_name]\n            for row in range(1, input_ws.max_row + 1):\n                for col in range(1, input_ws.max_column + 1):\n                    coord = input_ws.cell(row=row, column=col).coordinate\n                    input_value = input_ws.cell(row=row, column=col).value\n                    output_value = output_ws.cell(row=row, column=col).value\n                    if is_formula(input_value):\n                        input_formulas[(sheet_name, coord)] = input_value\n                    if is_formula(output_value):\n                        output_formulas[(sheet_name, coord)] = output_value\n        # Normalize formulas for comparison (case-insensitive, remove spaces and $)\n        _input_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in input_formulas.items()}\n        _output_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in output_formulas.items()}\n        assert _input_norm == _output_norm, 'Formula cells changed or were replaced with values'\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n\ndef test_other_values_and_unchanged_sheets_stay_put():\n    input_wb, input_path = load_workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_ws = input_wb[SHEET_NAME]\n        output_ws = output_wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair_cells(output_ws, FROM_TOKEN, TO_TOKEN)\n        input_values = get_sheet_matrix_values(input_ws)\n        output_values = get_sheet_matrix_values(output_ws)\n        for coord, input_value in input_values.items():\n            if coord in {direct_coord, inverse_coord}:\n                continue\n            assert_same(input_value, output_values[coord], coord)\n        for sheet_name in UNCHANGED_SHEETS:\n            input_sheet = input_wb[sheet_name]\n            output_sheet = output_wb[sheet_name]\n            max_row = max(input_sheet.max_row, output_sheet.max_row)\n            max_col = max(input_sheet.max_column, output_sheet.max_column)\n            for row in range(1, max_row + 1):\n                for col in range(1, max_col + 1):\n                    coord = input_sheet.cell(row=row, column=col).coordinate\n                    assert_same(input_sheet.cell(row=row, column=col).value, output_sheet.cell(row=row, column=col).value, f'{sheet_name}!{coord}')\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 4,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3-pip     libreoffice     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5     defusedxml==0.7.1\n\nWORKDIR /root\nCOPY input.pptx /root/input.pptx\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "input.pptx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Embedded-Data-Repair\\supplier-pack-matrix-refresh\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@meituan.com",
+            "difficulty": "medium",
+            "category": "Office Operation",
+            "tags": [
+              "pptx",
+              "xlsx",
+              "embedded-workbook",
+              "formula-preservation"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 900.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-e471bfa1ec20958e"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "catalyst-balance-matrix-sync",
+      "category": "Embedded-Data-Repair",
+      "family_id": "Embedded-Data-Repair",
+      "description": "You are correcting `/root/input.pptx`, a process engineering slide with an embedded Excel catalyst-balance workbook.\n\nThe slide note gives one final ratio update using short catalyst codes. Use `/root/label_aliases.csv` to match those codes to the workbook labels, update the live catalyst matrix in the embedded workbook, preserve formula cells as formulas, and save the corrected presentation to `/root/results.pptx`.\n\nRequirements:\n- Only the live catalyst matrix sheet should change.\n- Use `/root/label_aliases.csv` to resolve the note codes to workbook labels.\n- Keep formula cells as formulas; do not replace them with hardcoded numbers.\n- Let the reciprocal ratio update through the workbook logic.\n- Leave the cover sheet, all other workbook values, and the rest of the presentation unchanged.\n- Write the final file exactly to `/root/results.pptx`.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport os\nimport tempfile\nimport zipfile\n\nfrom openpyxl import load_workbook\n\nRESULT_FILE = \"/root/results.pptx\"\nINPUT_FILE = \"/root/input.pptx\"\nTARGET_EMBEDDING = 'Microsoft_Excel_Worksheet.xlsx'\nSHEET_NAME = 'Live Catalyst Matrix'\nHEADER_ROW = 4\nROW_LABEL_COL = 2\nFROM_TOKEN = 'Catalyst Beta Stream'\nTO_TOKEN = 'Catalyst Delta Stream'\nEXPECTED_RATE = 1.5625\nUNCHANGED_SHEETS = ['Cover']\nARCHIVE_EMBEDDINGS = []\n\n\ndef normalize(text):\n    return ''.join(ch.lower() for ch in str(text) if ch.isalnum())\n\n\ndef token_matches(value, token):\n    return value is not None and normalize(token) in normalize(value)\n\n\ndef extract_embedding_bytes(pptx_path, embedding_name):\n    with zipfile.ZipFile(pptx_path, 'r') as zf:\n        return zf.read(f'ppt/embeddings/{embedding_name}')\n\n\ndef workbook_from_embedding(pptx_path, embedding_name, data_only):\n    payload = extract_embedding_bytes(pptx_path, embedding_name)\n    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:\n        tmp.write(payload)\n        temp_path = tmp.name\n    wb = load_workbook(temp_path, data_only=data_only)\n    return wb, temp_path\n\n\ndef find_pair(ws, from_token, to_token):\n    row_map = {\n        row: ws.cell(row=row, column=ROW_LABEL_COL).value\n        for row in range(HEADER_ROW + 1, ws.max_row + 1)\n        if ws.cell(row=row, column=ROW_LABEL_COL).value not in (None, '')\n    }\n    col_map = {\n        col: ws.cell(row=HEADER_ROW, column=col).value\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1)\n        if ws.cell(row=HEADER_ROW, column=col).value not in (None, '')\n    }\n    from_row = next(row for row, value in row_map.items() if token_matches(value, from_token))\n    to_row = next(row for row, value in row_map.items() if token_matches(value, to_token))\n    from_col = next(col for col, value in col_map.items() if token_matches(value, from_token))\n    to_col = next(col for col, value in col_map.items() if token_matches(value, to_token))\n    return (from_row, to_col), (to_row, from_col)\n\n\ndef all_matrix_values(ws):\n    values = {}\n    for row in range(HEADER_ROW + 1, ws.max_row + 1):\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1):\n            values[(row, col)] = ws.cell(row=row, column=col).value\n    return values\n\n\ndef is_formula(value):\n    return isinstance(value, str) and value.startswith('=')\n\n\ndef assert_same(lhs, rhs, coord):\n    if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):\n        assert abs(lhs - rhs) < 1e-6, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n    else:\n        lhs_s = str(lhs).strip() if lhs is not None else None\n        rhs_s = str(rhs).strip() if rhs is not None else None\n        assert lhs_s == rhs_s, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n\n\ndef test_output_exists_and_contains_target_embedding():\n    assert os.path.exists(RESULT_FILE), 'results.pptx was not created'\n    assert zipfile.is_zipfile(RESULT_FILE), 'results.pptx is not a valid PPTX archive'\n    with zipfile.ZipFile(RESULT_FILE, 'r') as zf:\n        assert f'ppt/embeddings/{TARGET_EMBEDDING}' in zf.namelist(), 'Target embedding is missing from the output'\n\n\ndef test_target_pair_updated():\n    wb, temp_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=True)\n    try:\n        ws = wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair(ws, FROM_TOKEN, TO_TOKEN)\n        direct_value = ws.cell(*direct_coord).value\n        inverse_value = ws.cell(*inverse_coord).value\n        assert direct_value is not None, f'Direct rate cell is empty (no cached value)'\n        assert abs(direct_value - EXPECTED_RATE) < 1e-4, f'Expected {EXPECTED_RATE}, got {direct_value}'\n        # 双通路验证：先尝试缓存值，若为 None 则回退到公式语义检查\n        if inverse_value is not None:\n            assert abs(inverse_value - (1.0 / EXPECTED_RATE)) < 1e-3, f'Expected {1.0 / EXPECTED_RATE}, got {inverse_value}'\n        else:\n            # 缓存值为空，回退到公式语义检查\n            wb.close()\n            os.unlink(temp_path)\n            wb, temp_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=False)\n            ws = wb[SHEET_NAME]\n            inverse_formula = ws.cell(*inverse_coord).value\n            assert is_formula(inverse_formula), (\n                f'Inverse rate cell is neither a cached value nor a formula: {inverse_formula}'\n            )\n            # 检查公式是否包含对直接值单元格的正确引用（1/Dxx 或类似结构）\n            import re\n            direct_cell = ws.cell(*direct_coord).coordinate\n            norm_formula = str(inverse_formula).replace(' ', '').replace('$', '').upper()\n            # 允许 1/直接单元格 或 ROUND(1/直接单元格) 等变体\n            pattern = rf'(ROUND\\()?1/{direct_cell}(,\\d+)?\\)?'\n            assert re.search(pattern, norm_formula), (\n                f'Inverse formula does not reference the direct rate cell correctly: {inverse_formula}'\n            )\n    finally:\n        wb.close()\n        os.unlink(temp_path)\n\n\ndef test_formula_cells_preserved_in_target_embedding():\n    input_wb, input_path = workbook_from_embedding(INPUT_FILE, TARGET_EMBEDDING, data_only=False)\n    output_wb, output_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=False)\n    try:\n        input_formulas = {}\n        output_formulas = {}\n        for sheet_name in input_wb.sheetnames:\n            input_ws = input_wb[sheet_name]\n            output_ws = output_wb[sheet_name]\n            for row in range(1, input_ws.max_row + 1):\n                for col in range(1, input_ws.max_column + 1):\n                    coord = input_ws.cell(row=row, column=col).coordinate\n                    input_value = input_ws.cell(row=row, column=col).value\n                    output_value = output_ws.cell(row=row, column=col).value\n                    if is_formula(input_value):\n                        input_formulas[(sheet_name, coord)] = input_value\n                    if is_formula(output_value):\n                        output_formulas[(sheet_name, coord)] = output_value\n        # Normalize formulas for comparison (case-insensitive, remove spaces and $)\n        _input_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in input_formulas.items()}\n        _output_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in output_formulas.items()}\n        assert _input_norm == _output_norm, 'Formula cells changed or were replaced with values'\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n\ndef test_other_values_and_archive_embeddings_unchanged():\n    input_wb, input_path = workbook_from_embedding(INPUT_FILE, TARGET_EMBEDDING, data_only=True)\n    output_wb, output_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=True)\n    try:\n        input_ws = input_wb[SHEET_NAME]\n        output_ws = output_wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair(output_ws, FROM_TOKEN, TO_TOKEN)\n        input_values = all_matrix_values(input_ws)\n        output_values = all_matrix_values(output_ws)\n        for coord, input_value in input_values.items():\n            if coord in {direct_coord, inverse_coord}:\n                continue\n            assert_same(input_value, output_values[coord], coord)\n        for sheet_name in UNCHANGED_SHEETS:\n            in_sheet = input_wb[sheet_name]\n            out_sheet = output_wb[sheet_name]\n            max_row = max(in_sheet.max_row, out_sheet.max_row)\n            max_col = max(in_sheet.max_column, out_sheet.max_column)\n            for row in range(1, max_row + 1):\n                for col in range(1, max_col + 1):\n                    coord = in_sheet.cell(row=row, column=col).coordinate\n                    assert_same(in_sheet.cell(row=row, column=col).value, out_sheet.cell(row=row, column=col).value, f'{sheet_name}!{coord}')\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n    for embedding_name in ARCHIVE_EMBEDDINGS:\n        assert extract_embedding_bytes(INPUT_FILE, embedding_name) == extract_embedding_bytes(RESULT_FILE, embedding_name), (\n            f'Archive embedding {embedding_name} should be unchanged'\n        )\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 5,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y \\\n    python3-pip \\\n    libreoffice \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest==8.4.1 \\\n    pytest-json-ctrf==0.3.5 \\\n    openpyxl==3.1.5 \\\n    defusedxml==0.7.1\n\nWORKDIR /root\nCOPY input.pptx /root/input.pptx\nCOPY label_aliases.csv /root/label_aliases.csv\n",
+        "label_aliases.csv": "note_token,workbook_label\nCA,Catalyst Alpha Stream\nCB,Catalyst Beta Stream\nCC,Catalyst Gamma Stream\nCD,Catalyst Delta Stream\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "input.pptx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Embedded-Data-Repair\\catalyst-balance-matrix-sync\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@meituan.com",
+            "difficulty": "medium",
+            "category": "Office Operation",
+            "tags": [
+              "pptx",
+              "xlsx",
+              "embedded-workbook",
+              "formula-preservation"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 900.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-ed0413529c2ba25e"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "buffer-dilution-matrix-repair",
+      "category": "Embedded-Data-Repair",
+      "family_id": "Embedded-Data-Repair",
+      "description": "You are repairing `/root/input.pptx`, a lab methods slide with an embedded Excel dilution workbook.\n\nThe slide note includes one superseded ratio and one final approved ratio. Use the bracket codes in the note and workbook labels to identify the correct row and column, update only the dilution matrix sheet, preserve formula cells as formulas, and save the corrected presentation to `/root/results.pptx`.\n\nRequirements:\n- Leave the summary sheet unchanged.\n- Keep formula cells as formulas; do not replace them with hardcoded numbers.\n- Let the reciprocal ratio update through the workbook logic.\n- Ignore any note marked draft or superseded.\n- Write the final file exactly to `/root/results.pptx`.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport os\nimport tempfile\nimport zipfile\n\nfrom openpyxl import load_workbook\n\nRESULT_FILE = \"/root/results.pptx\"\nINPUT_FILE = \"/root/input.pptx\"\nEMBEDDED_EXCEL = \"ppt/embeddings/Microsoft_Excel_Worksheet.xlsx\"\nSHEET_NAME = 'Dilution Matrix'\nHEADER_ROW = 5\nROW_LABEL_COL = 4\nFROM_TOKEN = 'BUF10'\nTO_TOKEN = 'BUF5'\nEXPECTED_RATE = 2.0\nUNCHANGED_SHEETS = ['Summary']\n\n\ndef normalize(text):\n    return ''.join(ch.lower() for ch in str(text) if ch.isalnum())\n\n\ndef token_matches(value, token):\n    if value is None:\n        return False\n    return normalize(token) in normalize(value)\n\n\ndef extract_embedded_excel_path(pptx_path):\n    with zipfile.ZipFile(pptx_path, 'r') as zf:\n        payload = zf.read(EMBEDDED_EXCEL)\n    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:\n        tmp.write(payload)\n        return tmp.name\n\n\ndef load_workbook_from_pptx(pptx_path, data_only):\n    temp_path = extract_embedded_excel_path(pptx_path)\n    wb = load_workbook(temp_path, data_only=data_only)\n    return wb, temp_path\n\n\ndef find_pair_cells(ws, from_token, to_token):\n    row_map = {\n        row: ws.cell(row=row, column=ROW_LABEL_COL).value\n        for row in range(HEADER_ROW + 1, ws.max_row + 1)\n        if ws.cell(row=row, column=ROW_LABEL_COL).value not in (None, '')\n    }\n    col_map = {\n        col: ws.cell(row=HEADER_ROW, column=col).value\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1)\n        if ws.cell(row=HEADER_ROW, column=col).value not in (None, '')\n    }\n    from_row = next(row for row, value in row_map.items() if token_matches(value, from_token))\n    to_row = next(row for row, value in row_map.items() if token_matches(value, to_token))\n    from_col = next(col for col, value in col_map.items() if token_matches(value, from_token))\n    to_col = next(col for col, value in col_map.items() if token_matches(value, to_token))\n    return (from_row, to_col), (to_row, from_col)\n\n\ndef get_sheet_matrix_values(ws):\n    values = {}\n    for row in range(HEADER_ROW + 1, ws.max_row + 1):\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1):\n            values[(row, col)] = ws.cell(row=row, column=col).value\n    return values\n\n\ndef is_formula(value):\n    return isinstance(value, str) and value.startswith('=')\n\n\ndef assert_same(lhs, rhs, coord):\n    if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):\n        assert abs(lhs - rhs) < 1e-6, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n    else:\n        lhs_s = str(lhs).strip() if lhs is not None else None\n        rhs_s = str(rhs).strip() if rhs is not None else None\n        assert lhs_s == rhs_s, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n\n\ndef test_output_file_exists():\n    assert os.path.exists(RESULT_FILE), 'results.pptx was not created'\n\n\ndef test_output_is_valid_pptx():\n    assert zipfile.is_zipfile(RESULT_FILE), 'results.pptx is not a valid PPTX archive'\n    with zipfile.ZipFile(RESULT_FILE, 'r') as zf:\n        assert EMBEDDED_EXCEL in zf.namelist(), 'Embedded workbook is missing from the output'\n\n\ndef test_target_rate_and_inverse_are_updated():\n    wb, temp_path = load_workbook_from_pptx(RESULT_FILE, data_only=True)\n    try:\n        ws = wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair_cells(ws, FROM_TOKEN, TO_TOKEN)\n        direct_value = ws.cell(*direct_coord).value\n        inverse_value = ws.cell(*inverse_coord).value\n        assert direct_value is not None, f'Direct rate cell is empty (no cached value)'\n        assert abs(direct_value - EXPECTED_RATE) < 1e-4, (\n            f'Direct rate was not updated correctly: expected {EXPECTED_RATE}, got {direct_value}'\n        )\n        # 双通路验证：先尝试缓存值，若为 None 则回退到公式语义检查\n        if inverse_value is not None:\n            assert abs(inverse_value - (1.0 / EXPECTED_RATE)) < 1e-3, (\n                f'Inverse rate was not updated correctly: expected {1.0 / EXPECTED_RATE}, got {inverse_value}'\n            )\n        else:\n            # 缓存值为空，回退到公式语义检查\n            wb.close()\n            os.unlink(temp_path)\n            wb, temp_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n            ws = wb[SHEET_NAME]\n            inverse_formula = ws.cell(*inverse_coord).value\n            assert is_formula(inverse_formula), (\n                f'Inverse rate cell is neither a cached value nor a formula: {inverse_formula}'\n            )\n            # 检查公式是否包含对直接值单元格的正确引用（1/Dxx 或类似结构）\n            import re\n            direct_cell = ws.cell(*direct_coord).coordinate\n            norm_formula = str(inverse_formula).replace(' ', '').replace('$', '').upper()\n            # 允许 1/直接单元格 或 ROUND(1/直接单元格) 等变体\n            pattern = rf'(ROUND\\()?1/{direct_cell}(,\\d+)?\\)?'\n            assert re.search(pattern, norm_formula), (\n                f'Inverse formula does not reference the direct rate cell correctly: {inverse_formula}'\n            )\n    finally:\n        wb.close()\n        os.unlink(temp_path)\n\n\ndef test_formula_cells_preserved():\n    input_wb, input_path = load_workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_formulas = {}\n        output_formulas = {}\n        for sheet_name in input_wb.sheetnames:\n            input_ws = input_wb[sheet_name]\n            output_ws = output_wb[sheet_name]\n            for row in range(1, input_ws.max_row + 1):\n                for col in range(1, input_ws.max_column + 1):\n                    coord = input_ws.cell(row=row, column=col).coordinate\n                    input_value = input_ws.cell(row=row, column=col).value\n                    output_value = output_ws.cell(row=row, column=col).value\n                    if is_formula(input_value):\n                        input_formulas[(sheet_name, coord)] = input_value\n                    if is_formula(output_value):\n                        output_formulas[(sheet_name, coord)] = output_value\n        # Normalize formulas for comparison (case-insensitive, remove spaces and $)\n        _input_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in input_formulas.items()}\n        _output_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in output_formulas.items()}\n        assert _input_norm == _output_norm, 'Formula cells changed or were replaced with values'\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n\ndef test_other_values_and_unchanged_sheets_stay_put():\n    input_wb, input_path = load_workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = load_workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_ws = input_wb[SHEET_NAME]\n        output_ws = output_wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair_cells(output_ws, FROM_TOKEN, TO_TOKEN)\n        input_values = get_sheet_matrix_values(input_ws)\n        output_values = get_sheet_matrix_values(output_ws)\n        for coord, input_value in input_values.items():\n            if coord in {direct_coord, inverse_coord}:\n                continue\n            assert_same(input_value, output_values[coord], coord)\n        for sheet_name in UNCHANGED_SHEETS:\n            input_sheet = input_wb[sheet_name]\n            output_sheet = output_wb[sheet_name]\n            max_row = max(input_sheet.max_row, output_sheet.max_row)\n            max_col = max(input_sheet.max_column, output_sheet.max_column)\n            for row in range(1, max_row + 1):\n                for col in range(1, max_col + 1):\n                    coord = input_sheet.cell(row=row, column=col).coordinate\n                    assert_same(input_sheet.cell(row=row, column=col).value, output_sheet.cell(row=row, column=col).value, f'{sheet_name}!{coord}')\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 6,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3-pip     libreoffice     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5     defusedxml==0.7.1\n\nWORKDIR /root\nCOPY input.pptx /root/input.pptx\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "input.pptx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Embedded-Data-Repair\\buffer-dilution-matrix-repair\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@meituan.com",
+            "difficulty": "medium",
+            "category": "Office Operation",
+            "tags": [
+              "pptx",
+              "xlsx",
+              "embedded-workbook",
+              "formula-preservation"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 900.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-f679ad0279f6a37f"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "rebate-band-live-embedding-fix",
+      "category": "Embedded-Data-Repair",
+      "family_id": "Embedded-Data-Repair",
+      "description": "You are fixing `/root/input.pptx`, a channel rebate slide whose PPTX package contains two embedded Excel workbooks: one live and one archived.\n\nThe slide note includes an archived rebate line and a current approved rebate line. Use `/root/live_embedding.json` to identify which embedded workbook is live, update only that workbook, preserve formula cells as formulas, and save the corrected presentation to `/root/results.pptx`.\n\nRequirements:\n- Read `/root/live_embedding.json` to identify the live embedded workbook.\n- Ignore any note marked archived.\n- Keep formula cells as formulas; do not replace them with hardcoded numbers.\n- Let the reciprocal uplift update through the workbook logic.\n- Leave the archived embedded workbook, all other workbook values, and the rest of the presentation unchanged.\n- Write the final file exactly to `/root/results.pptx`.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport os\nimport tempfile\nimport zipfile\n\nfrom openpyxl import load_workbook\n\nRESULT_FILE = \"/root/results.pptx\"\nINPUT_FILE = \"/root/input.pptx\"\nTARGET_EMBEDDING = 'Live_Rebate_Bands.xlsx'\nSHEET_NAME = 'Approved Grid'\nHEADER_ROW = 3\nROW_LABEL_COL = 2\nFROM_TOKEN = 'Gold'\nTO_TOKEN = 'Platinum'\nEXPECTED_RATE = 1.31\nUNCHANGED_SHEETS = []\nARCHIVE_EMBEDDINGS = ['Archive_Rebate_Bands.xlsx']\n\n\ndef normalize(text):\n    return ''.join(ch.lower() for ch in str(text) if ch.isalnum())\n\n\ndef token_matches(value, token):\n    return value is not None and normalize(token) in normalize(value)\n\n\ndef extract_embedding_bytes(pptx_path, embedding_name):\n    with zipfile.ZipFile(pptx_path, 'r') as zf:\n        return zf.read(f'ppt/embeddings/{embedding_name}')\n\n\ndef workbook_from_embedding(pptx_path, embedding_name, data_only):\n    payload = extract_embedding_bytes(pptx_path, embedding_name)\n    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:\n        tmp.write(payload)\n        temp_path = tmp.name\n    wb = load_workbook(temp_path, data_only=data_only)\n    return wb, temp_path\n\n\ndef find_pair(ws, from_token, to_token):\n    row_map = {\n        row: ws.cell(row=row, column=ROW_LABEL_COL).value\n        for row in range(HEADER_ROW + 1, ws.max_row + 1)\n        if ws.cell(row=row, column=ROW_LABEL_COL).value not in (None, '')\n    }\n    col_map = {\n        col: ws.cell(row=HEADER_ROW, column=col).value\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1)\n        if ws.cell(row=HEADER_ROW, column=col).value not in (None, '')\n    }\n    from_row = next(row for row, value in row_map.items() if token_matches(value, from_token))\n    to_row = next(row for row, value in row_map.items() if token_matches(value, to_token))\n    from_col = next(col for col, value in col_map.items() if token_matches(value, from_token))\n    to_col = next(col for col, value in col_map.items() if token_matches(value, to_token))\n    return (from_row, to_col), (to_row, from_col)\n\n\ndef all_matrix_values(ws):\n    values = {}\n    for row in range(HEADER_ROW + 1, ws.max_row + 1):\n        for col in range(ROW_LABEL_COL + 1, ws.max_column + 1):\n            values[(row, col)] = ws.cell(row=row, column=col).value\n    return values\n\n\ndef is_formula(value):\n    return isinstance(value, str) and value.startswith('=')\n\n\ndef assert_same(lhs, rhs, coord):\n    if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):\n        assert abs(lhs - rhs) < 1e-6, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n    else:\n        lhs_s = str(lhs).strip() if lhs is not None else None\n        rhs_s = str(rhs).strip() if rhs is not None else None\n        assert lhs_s == rhs_s, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n\n\ndef test_output_exists_and_contains_target_embedding():\n    assert os.path.exists(RESULT_FILE), 'results.pptx was not created'\n    assert zipfile.is_zipfile(RESULT_FILE), 'results.pptx is not a valid PPTX archive'\n    with zipfile.ZipFile(RESULT_FILE, 'r') as zf:\n        assert f'ppt/embeddings/{TARGET_EMBEDDING}' in zf.namelist(), 'Target embedding is missing from the output'\n\n\ndef test_target_pair_updated():\n    wb, temp_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=True)\n    try:\n        ws = wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair(ws, FROM_TOKEN, TO_TOKEN)\n        direct_value = ws.cell(*direct_coord).value\n        inverse_value = ws.cell(*inverse_coord).value\n        assert direct_value is not None, f'Direct rate cell is empty (no cached value)'\n        assert abs(direct_value - EXPECTED_RATE) < 1e-4, f'Expected {EXPECTED_RATE}, got {direct_value}'\n        # 双通路验证：先尝试缓存值，若为 None 则回退到公式语义检查\n        if inverse_value is not None:\n            assert abs(inverse_value - (1.0 / EXPECTED_RATE)) < 1e-3, f'Expected {1.0 / EXPECTED_RATE}, got {inverse_value}'\n        else:\n            # 缓存值为空，回退到公式语义检查\n            wb.close()\n            os.unlink(temp_path)\n            wb, temp_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=False)\n            ws = wb[SHEET_NAME]\n            inverse_formula = ws.cell(*inverse_coord).value\n            assert is_formula(inverse_formula), (\n                f'Inverse rate cell is neither a cached value nor a formula: {inverse_formula}'\n            )\n            # 检查公式是否包含对直接值单元格的正确引用（1/Dxx 或类似结构）\n            import re\n            direct_cell = ws.cell(*direct_coord).coordinate\n            norm_formula = str(inverse_formula).replace(' ', '').replace('$', '').upper()\n            # 允许 1/直接单元格 或 ROUND(1/直接单元格) 等变体\n            pattern = rf'(ROUND\\()?1/{direct_cell}(,\\d+)?\\)?'\n            assert re.search(pattern, norm_formula), (\n                f'Inverse formula does not reference the direct rate cell correctly: {inverse_formula}'\n            )\n    finally:\n        wb.close()\n        os.unlink(temp_path)\n\n\ndef test_formula_cells_preserved_in_target_embedding():\n    input_wb, input_path = workbook_from_embedding(INPUT_FILE, TARGET_EMBEDDING, data_only=False)\n    output_wb, output_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=False)\n    try:\n        input_formulas = {}\n        output_formulas = {}\n        for sheet_name in input_wb.sheetnames:\n            input_ws = input_wb[sheet_name]\n            output_ws = output_wb[sheet_name]\n            for row in range(1, input_ws.max_row + 1):\n                for col in range(1, input_ws.max_column + 1):\n                    coord = input_ws.cell(row=row, column=col).coordinate\n                    input_value = input_ws.cell(row=row, column=col).value\n                    output_value = output_ws.cell(row=row, column=col).value\n                    if is_formula(input_value):\n                        input_formulas[(sheet_name, coord)] = input_value\n                    if is_formula(output_value):\n                        output_formulas[(sheet_name, coord)] = output_value\n        # Normalize formulas for comparison (case-insensitive, remove spaces and $)\n        _input_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in input_formulas.items()}\n        _output_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in output_formulas.items()}\n        assert _input_norm == _output_norm, 'Formula cells changed or were replaced with values'\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n\ndef test_other_values_and_archive_embeddings_unchanged():\n    input_wb, input_path = workbook_from_embedding(INPUT_FILE, TARGET_EMBEDDING, data_only=True)\n    output_wb, output_path = workbook_from_embedding(RESULT_FILE, TARGET_EMBEDDING, data_only=True)\n    try:\n        input_ws = input_wb[SHEET_NAME]\n        output_ws = output_wb[SHEET_NAME]\n        direct_coord, inverse_coord = find_pair(output_ws, FROM_TOKEN, TO_TOKEN)\n        input_values = all_matrix_values(input_ws)\n        output_values = all_matrix_values(output_ws)\n        for coord, input_value in input_values.items():\n            if coord in {direct_coord, inverse_coord}:\n                continue\n            assert_same(input_value, output_values[coord], coord)\n        for sheet_name in UNCHANGED_SHEETS:\n            in_sheet = input_wb[sheet_name]\n            out_sheet = output_wb[sheet_name]\n            max_row = max(in_sheet.max_row, out_sheet.max_row)\n            max_col = max(in_sheet.max_column, out_sheet.max_column)\n            for row in range(1, max_row + 1):\n                for col in range(1, max_col + 1):\n                    coord = in_sheet.cell(row=row, column=col).coordinate\n                    assert_same(in_sheet.cell(row=row, column=col).value, out_sheet.cell(row=row, column=col).value, f'{sheet_name}!{coord}')\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n    for embedding_name in ARCHIVE_EMBEDDINGS:\n        assert extract_embedding_bytes(INPUT_FILE, embedding_name) == extract_embedding_bytes(RESULT_FILE, embedding_name), (\n            f'Archive embedding {embedding_name} should be unchanged'\n        )\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 7,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y \\\n    python3-pip \\\n    libreoffice \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest==8.4.1 \\\n    pytest-json-ctrf==0.3.5 \\\n    openpyxl==3.1.5 \\\n    defusedxml==0.7.1\n\nWORKDIR /root\nCOPY input.pptx /root/input.pptx\nCOPY live_embedding.json /root/live_embedding.json\n",
+        "live_embedding.json": "{\n  \"target_embedding\": \"Live_Rebate_Bands.xlsx\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "input.pptx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Embedded-Data-Repair\\rebate-band-live-embedding-fix\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@meituan.com",
+            "difficulty": "medium",
+            "category": "Office Operation",
+            "tags": [
+              "pptx",
+              "xlsx",
+              "embedded-workbook",
+              "formula-preservation"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 900.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-9dfc4c4d27fd461e"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "emission-zone-dual-matrix-repair",
+      "category": "Embedded-Data-Repair",
+      "family_id": "Embedded-Data-Repair",
+      "description": "You are repairing `/root/input.pptx`, an environmental compliance slide with an embedded Excel workbook that contains both archived and approved adjustment matrices on the same worksheet.\n\nThe slide note contains a draft factor line and a final approved factor line using short region codes. Use `/root/label_aliases.csv` to map the note codes to the workbook labels, use `/root/live_matrix_locator.json` to identify the approved matrix block, update only that matrix block, preserve formula cells as formulas, and save the corrected presentation to `/root/results.pptx`.\n\nRequirements:\n- Ignore any note marked draft or archived.\n- Use `/root/label_aliases.csv` to resolve the note codes to workbook labels.\n- Use `/root/live_matrix_locator.json` to identify the approved matrix block on the worksheet.\n- Keep formula cells as formulas; do not replace them with hardcoded numbers.\n- Let the reciprocal factor update through the workbook logic.\n- Leave the archived matrix block, all other workbook values, and the rest of the presentation unchanged.\n- Write the final file exactly to `/root/results.pptx`.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport os\nimport tempfile\nimport zipfile\n\nfrom openpyxl import load_workbook\n\nRESULT_FILE = \"/root/results.pptx\"\nINPUT_FILE = \"/root/input.pptx\"\nTARGET_EMBEDDING = 'Microsoft_Excel_Worksheet.xlsx'\nSHEET_NAME = 'Region Factors'\nTARGET_TITLE = 'Approved Adjustment Matrix'\nARCHIVE_TITLE = 'Archived Adjustment Matrix'\nFROM_TOKEN = 'North Coast Zone'\nTO_TOKEN = 'Harbor Fringe Zone'\nEXPECTED_RATE = 1.24\n\n\ndef normalize(text):\n    return ''.join(ch.lower() for ch in str(text) if ch.isalnum())\n\n\ndef token_matches(value, token):\n    return value is not None and normalize(token) in normalize(value)\n\n\ndef workbook_from_pptx(pptx_path, data_only):\n    with zipfile.ZipFile(pptx_path, 'r') as zf:\n        payload = zf.read(f'ppt/embeddings/{TARGET_EMBEDDING}')\n    with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:\n        tmp.write(payload)\n        temp_path = tmp.name\n    wb = load_workbook(temp_path, data_only=data_only)\n    return wb, temp_path\n\n\ndef find_title(ws, title):\n    for row in ws.iter_rows():\n        for cell in row:\n            if cell.value == title:\n                return cell.row, cell.column\n    raise AssertionError(f'Title {title} not found')\n\n\ndef matrix_bounds(ws, title):\n    title_row, title_col = find_title(ws, title)\n    anchor_row = title_row + 1\n    anchor_col = title_col\n    row_labels = []\n    row = anchor_row + 1\n    while ws.cell(row=row, column=anchor_col).value not in (None, ''):\n        row_labels.append(row)\n        row += 1\n    col_labels = []\n    col = anchor_col + 1\n    while ws.cell(row=anchor_row, column=col).value not in (None, ''):\n        col_labels.append(col)\n        col += 1\n    return anchor_row, anchor_col, row_labels, col_labels\n\n\ndef find_pair(ws, title, from_token, to_token):\n    anchor_row, anchor_col, row_labels, col_labels = matrix_bounds(ws, title)\n    from_row = next(row for row in row_labels if token_matches(ws.cell(row=row, column=anchor_col).value, from_token))\n    to_row = next(row for row in row_labels if token_matches(ws.cell(row=row, column=anchor_col).value, to_token))\n    from_col = next(col for col in col_labels if token_matches(ws.cell(row=anchor_row, column=col).value, from_token))\n    to_col = next(col for col in col_labels if token_matches(ws.cell(row=anchor_row, column=col).value, to_token))\n    return (from_row, to_col), (to_row, from_col), (anchor_row, anchor_col, row_labels, col_labels)\n\n\ndef is_formula(value):\n    return isinstance(value, str) and value.startswith('=')\n\n\ndef assert_same(lhs, rhs, coord):\n    if isinstance(lhs, (int, float)) and isinstance(rhs, (int, float)):\n        assert abs(lhs - rhs) < 1e-6, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n    else:\n        lhs_s = str(lhs).strip() if lhs is not None else None\n        rhs_s = str(rhs).strip() if rhs is not None else None\n        assert lhs_s == rhs_s, f'Unexpected change at {coord}: {lhs} -> {rhs}'\n\n\ndef test_output_exists():\n    assert os.path.exists(RESULT_FILE), 'results.pptx was not created'\n    assert zipfile.is_zipfile(RESULT_FILE), 'results.pptx is not a valid PPTX archive'\n\n\ndef test_live_matrix_updated_and_archive_matrix_unchanged():\n    input_wb, input_path = workbook_from_pptx(INPUT_FILE, data_only=True)\n    output_wb, output_path = workbook_from_pptx(RESULT_FILE, data_only=True)\n    try:\n        input_ws = input_wb[SHEET_NAME]\n        output_ws = output_wb[SHEET_NAME]\n        direct_coord, inverse_coord, target_bounds = find_pair(output_ws, TARGET_TITLE, FROM_TOKEN, TO_TOKEN)\n        direct_value = output_ws.cell(*direct_coord).value\n        inverse_value = output_ws.cell(*inverse_coord).value\n        assert direct_value is not None, f'Direct rate cell is empty (no cached value)'\n        assert abs(direct_value - EXPECTED_RATE) < 1e-4, f'Expected {EXPECTED_RATE}, got {direct_value}'\n        # 双通路验证：先尝试缓存值，若为 None 则回退到公式语义检查\n        if inverse_value is not None:\n            assert abs(inverse_value - (1.0 / EXPECTED_RATE)) < 1e-3, f'Expected {1.0 / EXPECTED_RATE}, got {inverse_value}'\n        else:\n            # 缓存值为空，回退到公式语义检查\n            output_wb.close()\n            os.unlink(output_path)\n            output_wb, output_path = workbook_from_pptx(RESULT_FILE, data_only=False)\n            output_ws = output_wb[SHEET_NAME]\n            inverse_formula = output_ws.cell(*inverse_coord).value\n            assert is_formula(inverse_formula), (\n                f'Inverse rate cell is neither a cached value nor a formula: {inverse_formula}'\n            )\n            # 检查公式是否包含对直接值单元格的正确引用（1/Dxx 或类似结构）\n            import re\n            direct_cell = output_ws.cell(*direct_coord).coordinate\n            norm_formula = str(inverse_formula).replace(' ', '').replace('$', '').upper()\n            # 允许 1/直接单元格 或 ROUND(1/直接单元格) 等变体\n            pattern = rf'(ROUND\\()?1/{direct_cell}(,\\d+)?\\)?'\n            assert re.search(pattern, norm_formula), (\n                f'Inverse formula does not reference the direct rate cell correctly: {inverse_formula}'\n            )\n\n        _, _, archive_bounds = find_pair(output_ws, ARCHIVE_TITLE, FROM_TOKEN, TO_TOKEN)\n\n        for row in archive_bounds[2]:\n            for col in archive_bounds[3]:\n                coord = output_ws.cell(row=row, column=col).coordinate\n                assert_same(input_ws.cell(row=row, column=col).value, output_ws.cell(row=row, column=col).value, f'archive!{coord}')\n\n        for row in target_bounds[2]:\n            for col in target_bounds[3]:\n                coord = (row, col)\n                if coord in {direct_coord, inverse_coord}:\n                    continue\n                cell_ref = output_ws.cell(row=row, column=col).coordinate\n                assert_same(input_ws.cell(row=row, column=col).value, output_ws.cell(row=row, column=col).value, f'live!{cell_ref}')\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n\n\ndef test_formula_cells_preserved():\n    input_wb, input_path = workbook_from_pptx(INPUT_FILE, data_only=False)\n    output_wb, output_path = workbook_from_pptx(RESULT_FILE, data_only=False)\n    try:\n        input_formulas = {}\n        output_formulas = {}\n        for sheet_name in input_wb.sheetnames:\n            input_ws = input_wb[sheet_name]\n            output_ws = output_wb[sheet_name]\n            for row in range(1, input_ws.max_row + 1):\n                for col in range(1, input_ws.max_column + 1):\n                    coord = input_ws.cell(row=row, column=col).coordinate\n                    input_value = input_ws.cell(row=row, column=col).value\n                    output_value = output_ws.cell(row=row, column=col).value\n                    if is_formula(input_value):\n                        input_formulas[(sheet_name, coord)] = input_value\n                    if is_formula(output_value):\n                        output_formulas[(sheet_name, coord)] = output_value\n        # Normalize formulas for comparison (case-insensitive, remove spaces and $)\n        _input_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in input_formulas.items()}\n        _output_norm = {k: str(v).replace(' ', '').replace('$', '').upper() for k, v in output_formulas.items()}\n        assert _input_norm == _output_norm, 'Formula cells changed or were replaced with values'\n    finally:\n        input_wb.close()\n        output_wb.close()\n        os.unlink(input_path)\n        os.unlink(output_path)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 8,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y \\\n    python3-pip \\\n    libreoffice \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest==8.4.1 \\\n    pytest-json-ctrf==0.3.5 \\\n    openpyxl==3.1.5 \\\n    defusedxml==0.7.1\n\nWORKDIR /root\nCOPY input.pptx /root/input.pptx\nCOPY label_aliases.csv /root/label_aliases.csv\nCOPY live_matrix_locator.json /root/live_matrix_locator.json\n",
+        "label_aliases.csv": "note_token,workbook_label\nNC,North Coast Zone\nSB,South Basin Zone\nMI,Mountain Interior Zone\nHF,Harbor Fringe Zone\n",
+        "live_matrix_locator.json": "{\n  \"sheet_name\": \"Region Factors\",\n  \"matrix_title\": \"Approved Adjustment Matrix\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "input.pptx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Embedded-Data-Repair\\emission-zone-dual-matrix-repair\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@meituan.com",
+            "difficulty": "medium",
+            "category": "Office Operation",
+            "tags": [
+              "pptx",
+              "xlsx",
+              "embedded-workbook",
+              "formula-preservation"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 900.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-6667e6bc8eb138e6"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    }
+  ]
+}

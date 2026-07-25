@@ -1,0 +1,48 @@
+# experiments/reproduction_matrix.yaml
+#
+# 论文复现实验矩阵（Phase15 复现保真审计 · Phase7）
+#
+# 用途：把「论文 Setting 编号」显式映射到「本仓库配置文件」，供
+# run.py --setting N 与人工核对使用，避免入口/配置混乱（对应 Phase5/6）。
+#
+# 官方复现入口统一为：
+#     python run.py --setting <N> [--rounds N] [--dry-run]
+#
+# 严格顺序执行（不要并发跑，避免共享 results/ 目录写冲突）：
+#     Setting1 → Setting2 → Setting3 → Setting4
+
+setting1:
+  name: SE
+  description: 自演化基线（Self-Evolution），单 worker，无联邦聚合
+  config: setting_se.yaml
+  sampler: random
+
+setting2:
+  name: Homo-Fed
+  description: 同构联邦（3 个 worker 相同 backbone+harness），验证联邦聚合本身的收益
+  config: setting_homo_fed.yaml
+  sampler: random
+
+setting3:
+  name: Hetero-backbone
+  description: 异构 backbone（qwen3.6-plus / glm-5 / kimi-k2.5），统一 harness=claude-code
+  config: setting_hetero_backbone.yaml
+  sampler: heterogeneous
+
+setting4:
+  name: Hetero-full
+  description: 论文核心场景——backbone 与 agent harness 均异构
+  config: setting_full_hetero.yaml
+  sampler: heterogeneous
+
+# 消融实验（非 Setting1-4 主表，用于论文 Table/Ablation 部分）
+ablations:
+  a1_no_capability_matrix:
+    description: 去掉 Capability Matrix C^t，验证其对 Stage1 决策的贡献
+    config: ablation_a1_no_capability_matrix.yaml
+  a2_global_library:
+    description: 去掉个体化技能库，改为全局共享单一技能库
+    config: ablation_a2_global_library.yaml
+  a3_full_trajectory:
+    description: Distiller 不做压缩，直接使用完整轨迹
+    config: ablation_a3_full_trajectory.yaml

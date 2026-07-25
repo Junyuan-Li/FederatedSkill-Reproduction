@@ -1,0 +1,579 @@
+{
+  "family_id": "Compensation-Scenario-Modeling",
+  "description": "真实 SkillFlow family: Compensation-Scenario-Modeling（8 个递增难度任务）",
+  "skill_name": "Compensation-Scenario-Modeling",
+  "tasks": [
+    {
+      "task_id": "01_orchestra_foundation_model",
+      "category": "Compensation-Scenario-Modeling",
+      "family_id": "Compensation-Scenario-Modeling",
+      "description": "Build an Excel compensation model workbook at:\n\n`/root/Orchestra_Compensation.xlsx`\n\nUse the source file:\n\n`/root/orchestra_assumptions_and_roster.xlsx`\n\nThe model should be designed for ad hoc scenario analysis over 3 years (Current, Year + 1, Year + 2), and it must be formula-driven.\n\nRequired output requirements:\n\n1. The workbook must contain exactly these worksheets (in this order):\n   - `Summary`\n   - `Assumptions`\n   - `Roster`\n   - `Calculations --->`\n   - `EE Calcs (Current)`\n   - `EE Calcs (Yr+1)`\n   - `EE Calcs (Yr+2)`\n\n2. Migrate the source assumptions and roster into the model:\n   - `Assumptions` sheet must preserve assumption text and numeric drivers from the source workbook.\n   - `Roster` sheet must include all musicians with no dropped/duplicated rows.\n\n3. `Summary` sheet:\n   - Include input drivers for MWS, premiums, media fee, withholding/tax rates, and seniority tiers for all 3 years.\n   - Include quarterly compensation summary rows for:\n     - MWS\n     - Overscale\n     - Principal Pay\n     - Media Exploitation\n     - Seniority\n     - Payroll Tax\n     - Total Compensation Expense\n     - Y/Y growth rate\n   - The quarterly rows must be formula-linked to the calculation sheets (`EE Calcs (Current)`, `EE Calcs (Yr+1)`, `EE Calcs (Yr+2)`), not hardcoded.\n\n4. Named ranges:\n   - Define named ranges for the key assumptions (MWS, principal tiers, media, payroll tax tiers/limits, and seniority tiers) across all 3 years.\n\n5. Calculation sheets:\n   - Must include per-employee formulas for each compensation component by quarter.\n   - Must include payroll tax formulas with tiered tax treatment.\n   - Must aggregate quarterly totals in row 107.\n   - Year + 1 and Year + 2 sheets must project years-of-service forward (+1 each year).\n\n6. Formula-first constraint:\n   - Summary totals, quarterly totals, and YoY growth rows must be formula-driven.\n   - Do not hardcode summary outputs.\n\nOnly the final workbook path above is graded.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nfrom pathlib import Path\n\nimport pytest\nfrom openpyxl import load_workbook\nfrom openpyxl.utils import get_column_letter\n\nOUTPUT_FILE = Path(\"/root/Orchestra_Compensation.xlsx\")\nSOURCE_FILE = Path(\"/root/orchestra_assumptions_and_roster.xlsx\")\n\n\ndef norm_formula(value):\n    if value is None:\n        return None\n    return str(value).replace(\" \", \"\")\n\n\n@pytest.fixture(scope=\"module\")\ndef output_wb():\n    assert OUTPUT_FILE.exists(), f\"Missing required output file: {OUTPUT_FILE}\"\n    return load_workbook(OUTPUT_FILE, data_only=False)\n\n\n@pytest.fixture(scope=\"module\")\ndef source_wb():\n    assert SOURCE_FILE.exists(), f\"Missing required source file: {SOURCE_FILE}\"\n    return load_workbook(SOURCE_FILE, data_only=False)\n\n\ndef test_sheet_names(output_wb):\n    assert output_wb.sheetnames == [\n        \"Summary\",\n        \"Assumptions\",\n        \"Roster\",\n        \"Calculations --->\",\n        \"EE Calcs (Current)\",\n        \"EE Calcs (Yr+1)\",\n        \"EE Calcs (Yr+2)\",\n    ]\n\n\ndef test_defined_names(output_wb):\n    expected = {\n        \"MWS_Yr1\": \"Summary!$C$5\",\n        \"MWS_Yr2\": \"Summary!$D$5\",\n        \"MWS_Yr3\": \"Summary!$E$5\",\n        \"Princ_Yr1\": \"Summary!$C$7\",\n        \"Princ_Yr2\": \"Summary!$D$7\",\n        \"Princ_Yr3\": \"Summary!$E$7\",\n        \"AssocPr_Yr1\": \"Summary!$C$8\",\n        \"AssocPr_Yr2\": \"Summary!$D$8\",\n        \"AssocPr_Yr3\": \"Summary!$E$8\",\n        \"AsstPr_Yr1\": \"Summary!$C$9\",\n        \"AsstPr_Yr2\": \"Summary!$D$9\",\n        \"AsstPr_Yr3\": \"Summary!$E$9\",\n        \"Media_Yr1\": \"Summary!$C$10\",\n        \"Media_Yr2\": \"Summary!$D$10\",\n        \"Media_Yr3\": \"Summary!$E$10\",\n        \"WHLim_Yr1\": \"Summary!$C$12\",\n        \"WHLim_Yr2\": \"Summary!$D$12\",\n        \"WHLim_Yr3\": \"Summary!$E$12\",\n        \"WHto7k_Yr1\": \"Summary!$C$13\",\n        \"WHto7k_Yr2\": \"Summary!$D$13\",\n        \"WHto7k_Yr3\": \"Summary!$E$13\",\n        \"WH7ktoLim_Yr1\": \"Summary!$C$14\",\n        \"WH7ktoLim_Yr2\": \"Summary!$D$14\",\n        \"WH7ktoLim_Yr3\": \"Summary!$E$14\",\n        \"WHoverLim_Yr1\": \"Summary!$C$15\",\n        \"WHoverLim_Yr2\": \"Summary!$D$15\",\n        \"WHoverLim_Yr3\": \"Summary!$E$15\",\n        \"Sr5to9_Yr1\": \"Summary!$C$17\",\n        \"Sr5to9_Yr2\": \"Summary!$D$17\",\n        \"Sr5to9_Yr3\": \"Summary!$E$17\",\n        \"Sr10to14_Yr1\": \"Summary!$C$18\",\n        \"Sr10to14_Yr2\": \"Summary!$D$18\",\n        \"Sr10to14_Yr3\": \"Summary!$E$18\",\n        \"Sr15to19_Yr1\": \"Summary!$C$19\",\n        \"Sr15to19_Yr2\": \"Summary!$D$19\",\n        \"Sr15to19_Yr3\": \"Summary!$E$19\",\n        \"Sr20to24_Yr1\": \"Summary!$C$20\",\n        \"Sr20to24_Yr2\": \"Summary!$D$20\",\n        \"Sr20to24_Yr3\": \"Summary!$E$20\",\n        \"Sr25up_Yr1\": \"Summary!$C$21\",\n        \"Sr25up_Yr2\": \"Summary!$D$21\",\n        \"Sr25up_Yr3\": \"Summary!$E$21\",\n    }\n\n    for name, expected_ref in expected.items():\n        assert name in output_wb.defined_names, f\"Missing defined name: {name}\"\n        actual = output_wb.defined_names[name].attr_text\n        assert actual == expected_ref, f\"Defined name {name} expected {expected_ref}, got {actual}\"\n\n\ndef test_summary_structure_and_formulas(output_wb):\n    ws = output_wb[\"Summary\"]\n\n    assert ws[\"B1\"].value == \"Renaissance Popular Orchestra - Musician Compensation\"\n    assert ws[\"C5\"].value == 2395\n    assert norm_formula(ws[\"D5\"].value) == \"=C5*(1+D6)\"\n    assert norm_formula(ws[\"E5\"].value) == \"=D5*(1+E6)\"\n    assert ws[\"D6\"].value == 0.05\n    assert ws[\"E6\"].value == 0.05\n    assert norm_formula(ws[\"D12\"].value) == \"=WHLim_Yr1*1.03\"\n    assert norm_formula(ws[\"E12\"].value) == \"=D12*1.03\"\n\n    expected_labels = [\n        \"MWS\",\n        \"Overscale\",\n        \"Principal Pay\",\n        \"Media Exploitation\",\n        \"Seniority\",\n        \"Payroll Tax\",\n    ]\n    for i, label in enumerate(expected_labels, start=26):\n        assert ws[f\"B{i}\"].value == label\n\n    calc_col_groups = {\n        26: [\"H\", \"I\", \"J\", \"K\"],\n        27: [\"L\", \"M\", \"N\", \"O\"],\n        28: [\"P\", \"Q\", \"R\", \"S\"],\n        29: [\"T\", \"U\", \"V\", \"W\"],\n        30: [\"X\", \"Y\", \"Z\", \"AA\"],\n        31: [\"AF\", \"AG\", \"AH\", \"AI\"],\n    }\n\n    year_sheets = [\"EE Calcs (Current)\", \"EE Calcs (Yr+1)\", \"EE Calcs (Yr+2)\"]\n    summary_start_cols = [3, 7, 11]  # C, G, K\n\n    for row_num, calc_cols in calc_col_groups.items():\n        for sheet_name, start_col in zip(year_sheets, summary_start_cols):\n            for offset, calc_col in enumerate(calc_cols):\n                summary_col = get_column_letter(start_col + offset)\n                expected_formula = f\"='{sheet_name}'!{calc_col}107\"\n                assert norm_formula(ws[f\"{summary_col}{row_num}\"].value) == norm_formula(expected_formula)\n\n    for col_idx in range(3, 15):  # C:N\n        col = get_column_letter(col_idx)\n        assert norm_formula(ws[f\"{col}32\"].value) == f\"=SUM({col}26:{col}31)\"\n\n    expected_yoy = {\n        \"G33\": \"=G32/C32-1\",\n        \"H33\": \"=H32/D32-1\",\n        \"I33\": \"=I32/E32-1\",\n        \"J33\": \"=J32/F32-1\",\n        \"K33\": \"=K32/G32-1\",\n        \"L33\": \"=L32/H32-1\",\n        \"M33\": \"=M32/I32-1\",\n        \"N33\": \"=N32/J32-1\",\n    }\n    for cell, formula in expected_yoy.items():\n        assert norm_formula(ws[cell].value) == formula\n\n\ndef test_roster_and_assumptions_migration(output_wb, source_wb):\n    src_assump = source_wb[\"Assumptions\"]\n    out_assump = output_wb[\"Assumptions\"]\n\n    assert \"Renaissance Popular Orchestra\" in str(out_assump[\"B1\"].value)\n    assert out_assump[\"B3\"].value == src_assump[\"B3\"].value\n    assert \"Payroll Tax\" in str(out_assump[\"B18\"].value)\n\n    for row in range(13, 18):\n        assert out_assump[f\"C{row}\"].value == src_assump[f\"C{row}\"].value\n        assert out_assump[f\"D{row}\"].value == src_assump[f\"D{row}\"].value\n\n    src_roster = source_wb[\"Roster\"]\n    out_roster = output_wb[\"Roster\"]\n\n    # Source data is B6:F108. Output is A4:E106.\n    for i, src_row in enumerate(range(6, 109), start=4):\n        src_vals = [src_roster.cell(src_row, c).value for c in range(2, 7)]\n        out_vals = [out_roster.cell(i, c).value for c in range(1, 6)]\n        assert out_vals == src_vals, f\"Roster row mismatch at output row {i}\"\n\n\n@pytest.mark.parametrize(\n    \"sheet_name,year_token,service_ref\",\n    [\n        (\"EE Calcs (Current)\", \"Yr1\", None),\n        (\"EE Calcs (Yr+1)\", \"Yr2\", \"'EE Calcs (Current)'\"),\n        (\"EE Calcs (Yr+2)\", \"Yr3\", \"'EE Calcs (Yr+1)'\"),\n    ],\n)\ndef test_calc_sheet_formulas(output_wb, sheet_name, year_token, service_ref):\n    ws = output_wb[sheet_name]\n\n    assert ws[\"A3\"].value == \"Employee #\"\n    assert ws[\"B3\"].value == \"Titled Positions\"\n    assert ws[\"C3\"].value == \"Overscale\"\n    assert ws[\"D3\"].value == \"Years of Service\"\n    assert ws[\"E3\"].value == \"Notes\"\n    assert ws[\"F3\"].value == \"Principal\"\n    assert ws[\"G3\"].value == \"Seniority\"\n\n    if service_ref is None:\n        assert isinstance(ws[\"D4\"].value, (int, float))\n    else:\n        d4 = norm_formula(ws[\"D4\"].value)\n        assert d4 is not None\n        assert norm_formula(service_ref) in d4\n        assert \"+1\" in d4\n\n    assert f\"MWS_{year_token}\" in str(ws[\"F4\"].value)\n    assert f\"Sr5to9_{year_token}\" in str(ws[\"G4\"].value)\n    assert norm_formula(ws[\"H4\"].value) == f\"=MWS_{year_token}*13\"\n    assert norm_formula(ws[\"L4\"].value) == \"=IF(ISBLANK($E4),$C4*13,($C4-$F4)*13)\"\n    assert norm_formula(ws[\"P4\"].value) == \"=$F4*13\"\n    assert norm_formula(ws[\"T4\"].value) == f\"=Media_{year_token}*13\"\n    assert norm_formula(ws[\"AB4\"].value) == \"=SUMIFS($H4:$AA4,$H$3:$AA$3,AB$3)\"\n    assert f\"WHto7k_{year_token}\" in str(ws[\"AF4\"].value)\n    assert f\"WHLim_{year_token}\" in str(ws[\"AF4\"].value)\n    assert f\"WHoverLim_{year_token}\" in str(ws[\"AF4\"].value)\n\n    for col_idx in range(8, 36):  # H..AI\n        col = get_column_letter(col_idx)\n        expected = f\"=SUM({col}4:{col}106)\"\n        assert norm_formula(ws[f\"{col}107\"].value) == expected\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 1,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN python3 -m pip install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5\n\nCOPY orchestra_assumptions_and_roster.xlsx /root/orchestra_assumptions_and_roster.xlsx\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "orchestra_assumptions_and_roster.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Compensation-Scenario-Modeling\\01_orchestra_foundation_model\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Evalskill Refactor",
+            "author_email": "noreply@example.com",
+            "difficulty": "hard",
+            "category": "spreadsheet-modeling",
+            "tags": [
+              "excel",
+              "compensation",
+              "workbook",
+              "latent-skill-reuse",
+              "workflow-family"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-acbce87c2a3a5ea8"
+          }
+        },
+        "environment": {
+          "build_timeout_sec": 600.0,
+          "cpus": 1,
+          "memory_mb": 4096,
+          "storage_mb": 10240,
+          "docker_image": "harbor-prebuilt:task-acbce87c2a3a5ea8"
+        },
+        "agent_timeout_seconds": 1800.0,
+        "agent_timeout_source": "task.toml:[agent].timeout_sec",
+        "verifier_timeout_seconds": 900.0,
+        "verifier_timeout_source": "task.toml:[verifier].timeout_sec",
+        "environment_timeout_seconds": 600.0,
+        "environment_timeout_source": "task.toml:[environment].build_timeout_sec"
+      }
+    },
+    {
+      "task_id": "02_orchestra_archive_refresh_model",
+      "category": "Compensation-Scenario-Modeling",
+      "family_id": "Compensation-Scenario-Modeling",
+      "description": "Build an Excel compensation model workbook at:\n\n`/root/Festival_Orchestra_Compensation.xlsx`\n\nUse the source file:\n\n`/root/festival_archive_packet.xlsx`\n\nThe source packet includes an extra `Archive Notes` worksheet. It is context only and must not appear in the final workbook.\n\nThe model should remain a 3-year, formula-linked compensation workbook for a union-style orchestra roster.\n\nRequired output requirements:\n\n1. The workbook must contain exactly these worksheets (in this order):\n   - `Summary`\n   - `Assumptions`\n   - `Roster`\n   - `Calculations --->`\n   - `EE Calcs (Current)`\n   - `EE Calcs (Yr+1)`\n   - `EE Calcs (Yr+2)`\n\n2. Migrate the source assumptions and roster into the model:\n   - `Assumptions` must preserve the source drivers.\n   - `Roster` must include the full musician roster with no dropped or duplicated rows.\n\n3. `Summary` sheet:\n   - Keep the 3-year driver block for weekly scale, principal premiums, media fees, withholding limits/rates, and seniority tiers.\n   - Keep quarterly summary rows for MWS, overscale, principal pay, media exploitation, seniority, payroll tax, total compensation expense, and Y/Y growth.\n   - Quarterly summary rows must link to the EE Calcs sheets by formula.\n\n4. Named ranges:\n   - Define the full set of orchestra assumption named ranges across all 3 years.\n\n5. Calculation sheets:\n   - Preserve the quarter-by-quarter employee calculation layout.\n   - Aggregate quarterly totals in row 107.\n   - Year + 1 and Year + 2 must project service years forward.\n\n6. Formula-linked outputs:\n   - Summary totals, quarterly totals, and Y/Y rows must remain formula-linked rather than handwritten summaries.\n\nOnly the final workbook path above is graded.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nfrom pathlib import Path\n\nimport pytest\nfrom openpyxl import load_workbook\nfrom openpyxl.utils import get_column_letter\n\nOUTPUT_FILE = Path(\"/root/Festival_Orchestra_Compensation.xlsx\")\nSOURCE_FILE = Path(\"/root/festival_archive_packet.xlsx\")\n\n\ndef norm_formula(value):\n    if value is None:\n        return None\n    return str(value).replace(\" \", \"\")\n\n\n@pytest.fixture(scope=\"module\")\ndef output_wb():\n    assert OUTPUT_FILE.exists(), f\"Missing required output file: {OUTPUT_FILE}\"\n    return load_workbook(OUTPUT_FILE, data_only=False)\n\n\n@pytest.fixture(scope=\"module\")\ndef source_wb():\n    assert SOURCE_FILE.exists(), f\"Missing required source file: {SOURCE_FILE}\"\n    return load_workbook(SOURCE_FILE, data_only=False)\n\n\ndef test_sheet_names(output_wb):\n    assert output_wb.sheetnames == [\n        \"Summary\",\n        \"Assumptions\",\n        \"Roster\",\n        \"Calculations --->\",\n        \"EE Calcs (Current)\",\n        \"EE Calcs (Yr+1)\",\n        \"EE Calcs (Yr+2)\",\n    ]\n\n\ndef test_defined_names(output_wb):\n    expected = {\n        \"MWS_Yr1\": \"Summary!$C$5\",\n        \"MWS_Yr2\": \"Summary!$D$5\",\n        \"MWS_Yr3\": \"Summary!$E$5\",\n        \"Princ_Yr1\": \"Summary!$C$7\",\n        \"Princ_Yr2\": \"Summary!$D$7\",\n        \"Princ_Yr3\": \"Summary!$E$7\",\n        \"AssocPr_Yr1\": \"Summary!$C$8\",\n        \"AssocPr_Yr2\": \"Summary!$D$8\",\n        \"AssocPr_Yr3\": \"Summary!$E$8\",\n        \"AsstPr_Yr1\": \"Summary!$C$9\",\n        \"AsstPr_Yr2\": \"Summary!$D$9\",\n        \"AsstPr_Yr3\": \"Summary!$E$9\",\n        \"Media_Yr1\": \"Summary!$C$10\",\n        \"Media_Yr2\": \"Summary!$D$10\",\n        \"Media_Yr3\": \"Summary!$E$10\",\n        \"WHLim_Yr1\": \"Summary!$C$12\",\n        \"WHLim_Yr2\": \"Summary!$D$12\",\n        \"WHLim_Yr3\": \"Summary!$E$12\",\n        \"WHto7k_Yr1\": \"Summary!$C$13\",\n        \"WHto7k_Yr2\": \"Summary!$D$13\",\n        \"WHto7k_Yr3\": \"Summary!$E$13\",\n        \"WH7ktoLim_Yr1\": \"Summary!$C$14\",\n        \"WH7ktoLim_Yr2\": \"Summary!$D$14\",\n        \"WH7ktoLim_Yr3\": \"Summary!$E$14\",\n        \"WHoverLim_Yr1\": \"Summary!$C$15\",\n        \"WHoverLim_Yr2\": \"Summary!$D$15\",\n        \"WHoverLim_Yr3\": \"Summary!$E$15\",\n        \"Sr5to9_Yr1\": \"Summary!$C$17\",\n        \"Sr5to9_Yr2\": \"Summary!$D$17\",\n        \"Sr5to9_Yr3\": \"Summary!$E$17\",\n        \"Sr10to14_Yr1\": \"Summary!$C$18\",\n        \"Sr10to14_Yr2\": \"Summary!$D$18\",\n        \"Sr10to14_Yr3\": \"Summary!$E$18\",\n        \"Sr15to19_Yr1\": \"Summary!$C$19\",\n        \"Sr15to19_Yr2\": \"Summary!$D$19\",\n        \"Sr15to19_Yr3\": \"Summary!$E$19\",\n        \"Sr20to24_Yr1\": \"Summary!$C$20\",\n        \"Sr20to24_Yr2\": \"Summary!$D$20\",\n        \"Sr20to24_Yr3\": \"Summary!$E$20\",\n        \"Sr25up_Yr1\": \"Summary!$C$21\",\n        \"Sr25up_Yr2\": \"Summary!$D$21\",\n        \"Sr25up_Yr3\": \"Summary!$E$21\",\n    }\n\n    for name, expected_ref in expected.items():\n        assert name in output_wb.defined_names, f\"Missing defined name: {name}\"\n        actual = output_wb.defined_names[name].attr_text\n        assert actual == expected_ref, f\"Defined name {name} expected {expected_ref}, got {actual}\"\n\n\ndef test_summary_structure_and_formulas(output_wb):\n    ws = output_wb[\"Summary\"]\n\n    assert ws[\"B1\"].value == \"Festival Civic Orchestra - Musician Compensation\"\n    assert ws[\"C5\"].value == 2395\n    assert norm_formula(ws[\"D5\"].value) == \"=C5*(1+D6)\"\n    assert norm_formula(ws[\"E5\"].value) == \"=D5*(1+E6)\"\n    assert ws[\"D6\"].value == 0.05\n    assert ws[\"E6\"].value == 0.05\n    assert norm_formula(ws[\"D12\"].value) == \"=WHLim_Yr1*1.03\"\n    assert norm_formula(ws[\"E12\"].value) == \"=D12*1.03\"\n\n    expected_labels = [\n        \"MWS\",\n        \"Overscale\",\n        \"Principal Pay\",\n        \"Media Exploitation\",\n        \"Seniority\",\n        \"Payroll Tax\",\n    ]\n    for i, label in enumerate(expected_labels, start=26):\n        assert ws[f\"B{i}\"].value == label\n\n    calc_col_groups = {\n        26: [\"H\", \"I\", \"J\", \"K\"],\n        27: [\"L\", \"M\", \"N\", \"O\"],\n        28: [\"P\", \"Q\", \"R\", \"S\"],\n        29: [\"T\", \"U\", \"V\", \"W\"],\n        30: [\"X\", \"Y\", \"Z\", \"AA\"],\n        31: [\"AF\", \"AG\", \"AH\", \"AI\"],\n    }\n\n    year_sheets = [\"EE Calcs (Current)\", \"EE Calcs (Yr+1)\", \"EE Calcs (Yr+2)\"]\n    summary_start_cols = [3, 7, 11]  # C, G, K\n\n    for row_num, calc_cols in calc_col_groups.items():\n        for sheet_name, start_col in zip(year_sheets, summary_start_cols):\n            for offset, calc_col in enumerate(calc_cols):\n                summary_col = get_column_letter(start_col + offset)\n                expected_formula = f\"='{sheet_name}'!{calc_col}107\"\n                assert norm_formula(ws[f\"{summary_col}{row_num}\"].value) == norm_formula(expected_formula)\n\n    for col_idx in range(3, 15):  # C:N\n        col = get_column_letter(col_idx)\n        assert norm_formula(ws[f\"{col}32\"].value) == f\"=SUM({col}26:{col}31)\"\n\n    expected_yoy = {\n        \"G33\": \"=G32/C32-1\",\n        \"H33\": \"=H32/D32-1\",\n        \"I33\": \"=I32/E32-1\",\n        \"J33\": \"=J32/F32-1\",\n        \"K33\": \"=K32/G32-1\",\n        \"L33\": \"=L32/H32-1\",\n        \"M33\": \"=M32/I32-1\",\n        \"N33\": \"=N32/J32-1\",\n    }\n    for cell, formula in expected_yoy.items():\n        assert norm_formula(ws[cell].value) == formula\n\n\ndef test_roster_and_assumptions_migration(output_wb, source_wb):\n    src_assump = source_wb[\"Assumptions\"]\n    out_assump = output_wb[\"Assumptions\"]\n\n    assert \"Festival Civic Orchestra\" in str(out_assump[\"B1\"].value)\n    assert out_assump[\"B3\"].value == src_assump[\"B3\"].value\n    assert \"Payroll Tax\" in str(out_assump[\"B18\"].value)\n\n    for row in range(13, 18):\n        assert out_assump[f\"C{row}\"].value == src_assump[f\"C{row}\"].value\n        assert out_assump[f\"D{row}\"].value == src_assump[f\"D{row}\"].value\n\n    src_roster = source_wb[\"Roster\"]\n    out_roster = output_wb[\"Roster\"]\n\n    # Source data is B6:F108. Output is A4:E106.\n    for i, src_row in enumerate(range(6, 109), start=4):\n        src_vals = [src_roster.cell(src_row, c).value for c in range(2, 7)]\n        out_vals = [out_roster.cell(i, c).value for c in range(1, 6)]\n        assert out_vals == src_vals, f\"Roster row mismatch at output row {i}\"\n\n\n@pytest.mark.parametrize(\n    \"sheet_name,year_token,service_ref\",\n    [\n        (\"EE Calcs (Current)\", \"Yr1\", None),\n        (\"EE Calcs (Yr+1)\", \"Yr2\", \"'EE Calcs (Current)'\"),\n        (\"EE Calcs (Yr+2)\", \"Yr3\", \"'EE Calcs (Yr+1)'\"),\n    ],\n)\ndef test_calc_sheet_formulas(output_wb, sheet_name, year_token, service_ref):\n    ws = output_wb[sheet_name]\n\n    assert ws[\"A3\"].value == \"Employee #\"\n    assert ws[\"B3\"].value == \"Titled Positions\"\n    assert ws[\"C3\"].value == \"Overscale\"\n    assert ws[\"D3\"].value == \"Years of Service\"\n    assert ws[\"E3\"].value == \"Notes\"\n    assert ws[\"F3\"].value == \"Principal\"\n    assert ws[\"G3\"].value == \"Seniority\"\n\n    if service_ref is None:\n        assert isinstance(ws[\"D4\"].value, (int, float))\n    else:\n        d4 = norm_formula(ws[\"D4\"].value)\n        assert d4 is not None\n        assert norm_formula(service_ref) in d4\n        assert \"+1\" in d4\n\n    assert f\"MWS_{year_token}\" in str(ws[\"F4\"].value)\n    assert f\"Sr5to9_{year_token}\" in str(ws[\"G4\"].value)\n    assert norm_formula(ws[\"H4\"].value) == f\"=MWS_{year_token}*13\"\n    assert norm_formula(ws[\"L4\"].value) == \"=IF(ISBLANK($E4),$C4*13,($C4-$F4)*13)\"\n    assert norm_formula(ws[\"P4\"].value) == \"=$F4*13\"\n    assert norm_formula(ws[\"T4\"].value) == f\"=Media_{year_token}*13\"\n    assert norm_formula(ws[\"AB4\"].value) == \"=SUMIFS($H4:$AA4,$H$3:$AA$3,AB$3)\"\n    assert f\"WHto7k_{year_token}\" in str(ws[\"AF4\"].value)\n    assert f\"WHLim_{year_token}\" in str(ws[\"AF4\"].value)\n    assert f\"WHoverLim_{year_token}\" in str(ws[\"AF4\"].value)\n\n    for col_idx in range(8, 36):  # H..AI\n        col = get_column_letter(col_idx)\n        expected = f\"=SUM({col}4:{col}106)\"\n        assert norm_formula(ws[f\"{col}107\"].value) == expected\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 2,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN python3 -m pip install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5\n\nCOPY festival_archive_packet.xlsx /root/festival_archive_packet.xlsx\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "festival_archive_packet.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Compensation-Scenario-Modeling\\02_orchestra_archive_refresh_model\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Evalskill Refactor",
+            "author_email": "noreply@example.com",
+            "difficulty": "hard",
+            "category": "spreadsheet-modeling",
+            "tags": [
+              "excel",
+              "compensation",
+              "workbook",
+              "latent-skill-reuse",
+              "workflow-family"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-4c3a1084375e403d"
+          }
+        },
+        "environment": {
+          "build_timeout_sec": 600.0,
+          "cpus": 1,
+          "memory_mb": 4096,
+          "storage_mb": 10240,
+          "docker_image": "harbor-prebuilt:task-4c3a1084375e403d"
+        },
+        "agent_timeout_seconds": 1800.0,
+        "agent_timeout_source": "task.toml:[agent].timeout_sec",
+        "verifier_timeout_seconds": 900.0,
+        "verifier_timeout_source": "task.toml:[verifier].timeout_sec",
+        "environment_timeout_seconds": 600.0,
+        "environment_timeout_source": "task.toml:[environment].build_timeout_sec"
+      }
+    },
+    {
+      "task_id": "03_university_faculty_model",
+      "category": "Compensation-Scenario-Modeling",
+      "family_id": "Compensation-Scenario-Modeling",
+      "description": "# Harbor Task: University Faculty Compensation Model\n\n## Objective\n\nBuild a multi-year Excel compensation workbook for a university's full-time faculty.\n\n## Output\n\n`/root/University_Compensation.xlsx`\n\n## Input\n\n`/root/university_assumptions_and_roster.xlsx`\n\n## Sheet Structure (exact 7 sheets, in this order)\n\n1. `Summary` — Executive dashboard\n2. `Assumptions` — All model parameters migrated from the input file\n3. `Roster` — Full faculty roster migrated from the input file (75 faculty)\n4. `Calculations --->` — Navigation helper with links to EE Calcs sheets\n5. `EE Calcs (Current)` — Year 1 calculations, one row per faculty member + quarterly totals row\n6. `EE Calcs (Yr+1)` — Year 2 calculations (same layout, 3% base wage growth, years-of-service +1)\n7. `EE Calcs (Yr+2)` — Year 3 calculations (6% cumulative growth, years-of-service +2)\n\n## Compensation Components (8 components, rows 26–32 in Summary)\n\n| Row | Component | Description |\n|-----|-----------|-------------|\n| 26 | Base Pay (9-Month) | Annual salary ÷ 52 × 13, quarterly |\n| 27 | Summer Session Pay | Credits × Summer rate per credit ÷ 4 |\n| 28 | Sabbatical Bonus | 10% of base, if Sabbatical Eligible = TRUE |\n| 29 | Department Stipend | Rank-based: Full Prof/Assoc/Asst/Instructor |\n| 30 | Media Rights Allocation | Per faculty share of Media Pool ÷ 75 ÷ 4 |\n| 31 | Health Insurance | Flat annual ÷ 4 |\n| 32 | Retirement Match | Min(base_annual, prev_wage×0.06) × match rate ÷ 4 |\n\n**Row 33:** `---TOTAL---` (bold, formula-driven — sum of rows 26–32 per quarter)  \n**Row 34:** `Y/Y Growth` (formula-driven — G33/C33-1, K33/G33-1, O33/K33-1)\n\n## Named Ranges (50 ranges)\n\nDefine ALL assumptions as named ranges in the workbook:\n\n- `B9M_Yr1`, `B9M_Yr2`, `B9M_Yr3` — Base 9-month salary\n- `SumRate_Yr1`, `SumRate_Yr2`, `SumRate_Yr3` — Summer session rate per credit\n- `SabbPct_Yr1`, `SabbPct_Yr2`, `SabbPct_Yr3` — Sabbatical bonus rate\n- `StipFP_Yr1-3`, `StipAP_Yr1-3`, `StipAsst_Yr1-3`, `StipInst_Yr1-3` — Department stipend by rank\n- `MediaPool_Yr1-3` — Total media rights pool\n- `HlthIns_Yr1-3` — Health insurance annual amount\n- `RetRate_Yr1-3` — TIAA-C match rate\n- `RetCap_Yr1-3` — Retirement match cap (% of salary)\n- `WHLim_Yr1-3` — SS wage base limit\n- `SSRate_Yr1-3`, `MedRate_Yr1-3` — Tax rates\n- `Sr5to9_Yr1-3`, `Sr10to14_Yr1-3`, `Sr15to19_Yr1-3`, `Sr20to24_Yr1-3`, `Sr25up_Yr1-3` — Seniority adjustments\n\n## EE Calcs Sheet Layout\n\nRow 3: Headers (A..AI)  \nRows 4–78: One row per faculty member (75 faculty)  \nRow 79: Quarterly totals (`=SUM(H4:H78)` pattern for each of H..AI)\n\n### Column groups (H=column 8, etc.)\n\n| Cols | Component |\n|------|-----------|\n| H–K (8–11) | Base Pay Q1–Q4 |\n| L–O (12–15) | Summer Session Q1–Q4 |\n| P–S (16–19) | Sabbatical Bonus Q1–Q4 |\n| T–W (20–23) | Department Stipend Q1–Q4 |\n| X–AA (24–27) | Media Rights Q1–Q4 |\n| AB–AE (28–31) | Health Insurance Q1–Q4 |\n| AF–AI (32–35) | Retirement Match Q1–Q4 |\n\n## Formula Rules\n\n- All Summary quarterly totals MUST link to EE Calcs via cross-sheet formulas: e.g., `='EE Calcs (Current)'!H79`\n- Y/Y growth row MUST be formula-driven, not hardcoded\n- Quarterly totals row MUST use SUM formulas over data rows\n- EE Calcs Yr+1 and Yr+2 must use years-of-service +1/+2 from prior sheet\n\n## Verification\n\nThe workbook will be verified for:\n- Exact 7-sheet order and names\n- 50 defined named ranges\n- Summary B1 = organization name, C5 = starting base salary, D5 = formula =C5*1.03\n- Rows 26–32 = component labels, row 33 = Total, row 34 = Y/Y Growth\n- Quarterly totals in row 79 of each EE Calcs sheet\n- Roster migrated: source rows mapped to output rows\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n# --- test_outputs.py ---\nimport pytest\nimport openpyxl\nimport os\n\nOUTPUT_FILE = '/root/University_Compensation.xlsx'\nSRC_FILE = '/root/university_assumptions_and_roster.xlsx'\n\nclass TestSheetStructure:\n    def test_file_exists(self):\n        assert os.path.exists(OUTPUT_FILE), f\"Output file not found: {OUTPUT_FILE}\"\n\n    def test_sheet_names(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        expected = ['Summary', 'Assumptions', 'Roster', 'Calculations --->',\n                    'EE Calcs (Current)', 'EE Calcs (Yr+1)', 'EE Calcs (Yr+2)']\n        assert wb.sheetnames == expected, f\"Expected {expected}, got {wb.sheetnames}\"\n\n    def test_named_ranges_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        assert len(wb.defined_names) >= 50, f\"Expected >= 50 named ranges, got {len(wb.defined_names)}\"\n\n    def test_summary_title(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B1'].value is not None, \"Summary B1 should contain organization name\"\n\n    def test_summary_base_salary(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['C5'].value == 62000, f\"Expected C5=62000, got {ws['C5'].value}\"\n        assert ws['D5'].value == '=C5*1.03', f\"Expected D5='=C5*1.03', got {ws['D5'].value}\"\n\n    def test_summary_comp_rows(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B26'].value is not None, \"Summary row 26 should have component label\"\n        assert ws['B32'].value is not None, \"Summary row 32 should have component label\"\n        assert ws['B33'].value is not None, \"Summary row 33 should have total label\"\n\n    def test_ee_calcs_row_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        # 75 faculty rows + 1 totals row = 79\n        data_rows = sum(1 for r in ws.iter_rows(min_row=4, max_row=200, min_col=2, max_col=2) if r[0].value is not None)\n        assert data_rows >= 75, f\"Expected >=75 data rows, got {data_rows}\"\n\n    def test_quarterly_totals_row(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        # Row 79 should have quarterly totals\n        # Check H79 (first data column)\n        h79 = ws.cell(row=79, column=8).value\n        assert h79 is not None, \"Row 79 (quarterly totals) should exist in EE Calcs\"\n\n    def test_roster_migrated(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Roster']\n        # Should have at least 75 faculty entries\n        count = sum(1 for r in ws.iter_rows(min_row=5, max_row=200, min_col=2, max_col=2) if r[0].value is not None)\n        assert count >= 75, f\"Expected >=75 roster entries, got {count}\"\n\n    def test_ee_calcs_yoy_service_progression(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws1 = wb['EE Calcs (Current)']\n        ws2 = wb['EE Calcs (Yr+1)']\n        # Yrs of service should be +1 in Yr+1\n        for r in range(4, 79):\n            v1 = ws1.cell(row=r, column=5).value\n            v2 = ws2.cell(row=r, column=5).value\n            if v1 is not None and v2 is not None:\n                assert v2 == v1 + 1, f\"Row {r}: Yr+1 service should be +1 (got {v1}->{v2})\"\n                break  # Just check first valid row\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 3,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN python3 -m pip install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5\n\nCOPY university_assumptions_and_roster.xlsx /root/university_assumptions_and_roster.xlsx\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "university_assumptions_and_roster.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Compensation-Scenario-Modeling\\03_university_faculty_model\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Evalskill Refactor",
+            "author_email": "noreply@example.com",
+            "difficulty": "hard",
+            "category": "spreadsheet-modeling",
+            "tags": [
+              "excel",
+              "compensation",
+              "workbook",
+              "latent-skill-reuse",
+              "workflow-family"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-058a343ecc4025ca"
+          }
+        },
+        "environment": {
+          "build_timeout_sec": 600.0,
+          "cpus": 1,
+          "memory_mb": 4096,
+          "storage_mb": 10240,
+          "docker_image": "harbor-prebuilt:task-058a343ecc4025ca"
+        },
+        "agent_timeout_seconds": 1800.0,
+        "agent_timeout_source": "task.toml:[agent].timeout_sec",
+        "verifier_timeout_seconds": 900.0,
+        "verifier_timeout_source": "task.toml:[verifier].timeout_sec",
+        "environment_timeout_seconds": 600.0,
+        "environment_timeout_source": "task.toml:[environment].build_timeout_sec"
+      }
+    },
+    {
+      "task_id": "04_university_termload_refresh_model",
+      "category": "Compensation-Scenario-Modeling",
+      "family_id": "Compensation-Scenario-Modeling",
+      "description": "Build a multi-year Excel compensation workbook for a university's full-time faculty.\n\nOutput:\n\n`/root/Faculty_Termload_Compensation.xlsx`\n\nInput:\n\n`/root/faculty_termload_packet.xlsx`\n\nThe source packet includes an extra `Packet Notes` sheet. Ignore it in the final output.\n\nWorkbook contract:\n\n1. Keep exactly these 7 worksheets in order:\n   - `Summary`\n   - `Assumptions`\n   - `Roster`\n   - `Calculations --->`\n   - `EE Calcs (Current)`\n   - `EE Calcs (Yr+1)`\n   - `EE Calcs (Yr+2)`\n\n2. Preserve the standard faculty modeling structure:\n   - assumptions migrated into `Assumptions`\n   - faculty roster migrated into `Roster`\n   - quarterly totals on row 79 of each EE Calcs sheet\n\n3. `Summary` must still include these 8 compensation components:\n   - Base Pay (9-Month)\n   - Summer Session Pay\n   - Sabbatical Bonus\n   - Department Stipend\n   - Media Rights Allocation\n   - Health Insurance\n   - Retirement Match\n   - TOTAL and Y/Y Growth rows\n\n4. Define the faculty assumption named ranges across all 3 years.\n\n5. Keep the year-projection behavior:\n   - projected sheets advance service years\n   - summary totals remain cross-sheet linked\n   - total and Y/Y rows remain formula-based\n\nOnly the final workbook path above is graded.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n# --- test_outputs.py ---\nimport pytest\nimport openpyxl\nimport os\n\nOUTPUT_FILE = '/root/Faculty_Termload_Compensation.xlsx'\nSRC_FILE = '/root/faculty_termload_packet.xlsx'\n\nclass TestSheetStructure:\n    def test_file_exists(self):\n        assert os.path.exists(OUTPUT_FILE), f\"Output file not found: {OUTPUT_FILE}\"\n\n    def test_sheet_names(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        expected = ['Summary', 'Assumptions', 'Roster', 'Calculations --->',\n                    'EE Calcs (Current)', 'EE Calcs (Yr+1)', 'EE Calcs (Yr+2)']\n        assert wb.sheetnames == expected, f\"Expected {expected}, got {wb.sheetnames}\"\n\n    def test_named_ranges_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        assert len(wb.defined_names) >= 50, f\"Expected >= 50 named ranges, got {len(wb.defined_names)}\"\n\n    def test_summary_title(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B1'].value == 'Lakeshore State University - Faculty Compensation'\n\n    def test_summary_base_salary(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['C5'].value == 62000, f\"Expected C5=62000, got {ws['C5'].value}\"\n        assert ws['D5'].value == '=C5*1.03', f\"Expected D5='=C5*1.03', got {ws['D5'].value}\"\n\n    def test_summary_comp_rows(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B26'].value is not None, \"Summary row 26 should have component label\"\n        assert ws['B32'].value is not None, \"Summary row 32 should have component label\"\n        assert ws['B33'].value is not None, \"Summary row 33 should have total label\"\n\n    def test_ee_calcs_row_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        # 75 faculty rows + 1 totals row = 79\n        data_rows = sum(1 for r in ws.iter_rows(min_row=4, max_row=200, min_col=2, max_col=2) if r[0].value is not None)\n        assert data_rows >= 75, f\"Expected >=75 data rows, got {data_rows}\"\n\n    def test_quarterly_totals_row(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        # Row 79 should have quarterly totals\n        # Check H79 (first data column)\n        h79 = ws.cell(row=79, column=8).value\n        assert h79 is not None, \"Row 79 (quarterly totals) should exist in EE Calcs\"\n\n    def test_roster_migrated(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Roster']\n        # Should have at least 75 faculty entries\n        count = sum(1 for r in ws.iter_rows(min_row=5, max_row=200, min_col=2, max_col=2) if r[0].value is not None)\n        assert count >= 75, f\"Expected >=75 roster entries, got {count}\"\n\n    def test_ee_calcs_yoy_service_progression(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws1 = wb['EE Calcs (Current)']\n        ws2 = wb['EE Calcs (Yr+1)']\n        # Yrs of service should be +1 in Yr+1\n        for r in range(4, 79):\n            v1 = ws1.cell(row=r, column=5).value\n            v2 = ws2.cell(row=r, column=5).value\n            if v1 is not None and v2 is not None:\n                assert v2 == v1 + 1, f\"Row {r}: Yr+1 service should be +1 (got {v1}->{v2})\"\n                break  # Just check first valid row\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 4,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN python3 -m pip install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5\n\nCOPY faculty_termload_packet.xlsx /root/faculty_termload_packet.xlsx\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "faculty_termload_packet.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Compensation-Scenario-Modeling\\04_university_termload_refresh_model\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Evalskill Refactor",
+            "author_email": "noreply@example.com",
+            "difficulty": "hard",
+            "category": "spreadsheet-modeling",
+            "tags": [
+              "excel",
+              "compensation",
+              "workbook",
+              "latent-skill-reuse",
+              "workflow-family"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-15589334c7e1e8d4"
+          }
+        },
+        "environment": {
+          "build_timeout_sec": 600.0,
+          "cpus": 1,
+          "memory_mb": 4096,
+          "storage_mb": 10240,
+          "docker_image": "harbor-prebuilt:task-15589334c7e1e8d4"
+        },
+        "agent_timeout_seconds": 1800.0,
+        "agent_timeout_source": "task.toml:[agent].timeout_sec",
+        "verifier_timeout_seconds": 900.0,
+        "verifier_timeout_source": "task.toml:[verifier].timeout_sec",
+        "environment_timeout_seconds": 600.0,
+        "environment_timeout_source": "task.toml:[environment].build_timeout_sec"
+      }
+    },
+    {
+      "task_id": "05_property_management_model",
+      "category": "Compensation-Scenario-Modeling",
+      "family_id": "Compensation-Scenario-Modeling",
+      "description": "# Harbor Task: Property Management Compensation Model\n\n## Objective\n\nBuild a multi-year Excel compensation workbook for a property management company's staff.\n\n## Output\n\n`/root/Property_Management.xlsx`\n\n## Inputs (TWO source files)\n\n1. `/root/building_specs.xlsx` — Building Specifications sheet with 10 buildings\n   - Columns: Building ID, Building Name, Address, Property Type, Unit Count, Avg Unit Size, Management Fee Rate, Maintenance Reserve, Occupancy Rate\n\n2. `/root/staff_roster.xlsx` — Staff Roster sheet with 87 staff members\n   - Columns: Staff ID, Last Name, First Name, Title, Assigned Building, Yrs of Service, License Type, Units Managed\n\n## Sheet Structure (exact 8 sheets, in this order)\n\n1. `Summary` — Executive dashboard\n2. `Assumptions` — All model parameters migrated from the input file\n3. `Building Specs` — Building data migrated from building_specs.xlsx (10 buildings)\n4. `Roster` — Full staff roster migrated from staff_roster.xlsx (87 staff)\n5. `Calculations --->` — Navigation helper\n6. `EE Calcs (Current)` — Year 1 calculations (rows 4–90, quarterly totals row 91)\n7. `EE Calcs (Yr+1)` — Year 2 calculations\n8. `EE Calcs (Yr+2)` — Year 3 calculations\n\n## Compensation Components (8 components, rows 26–33 in Summary)\n\n| Row | Component | Description |\n|-----|-----------|-------------|\n| 26 | Base Pay | Annual salary ÷ 4 |\n| 27 | Property Mgmt Bonus | 4% of base annual (PropBns rate) |\n| 28 | Occupancy Incentive | Building-level occupancy bonus (OccCap per year) |\n| 29 | Portfolio Fee | 1.5% of base annual |\n| 30 | Vehicle Allowance | $4800/yr flat |\n| 31 | Health Insurance | Annual ÷ 4 |\n| 32 | Retirement Match | 6% of base annual ÷ 4 |\n| 33 | TOTAL | Formula-driven |\n| 34 | Y/Y Growth | Formula-driven |\n\n## Named Ranges\n\nDefine ALL assumptions as named ranges: BaseSal_Yr1, BaseSal_Yr2, BaseSal_Yr3, PropBns_Yr1, PropBns_Yr2, PropBns_Yr3, OccCap_Yr1, OccCap_Yr2, OccCap_Yr3, PortRate_Yr1, PortRate_Yr2, PortRate_Yr3, VehAllow_Yr1, VehAllow_Yr2, VehAllow_Yr3, HlthIns_Yr1, HlthIns_Yr2, HlthIns_Yr3, RetRate_Yr1, RetRate_Yr2, RetRate_Yr3, WHLim_Yr1, WHLim_Yr2, WHLim_Yr3, SSRate_Yr1, SSRate_Yr2, SSRate_Yr3, MedRate_Yr1, MedRate_Yr2, MedRate_Yr3, Sr5to9_Yr1, Sr5to9_Yr2, Sr5to9_Yr3, Sr10to14_Yr1, Sr10to14_Yr2, Sr10to14_Yr3, Sr15to19_Yr1, Sr15to19_Yr2, Sr15to19_Yr3, Sr20to24_Yr1, Sr20to24_Yr2, Sr20to24_Yr3, Sr25up_Yr1, Sr25up_Yr2, Sr25up_Yr3\n\n## Two-File Merge Requirement\n\nThe model MUST read BOTH input files and merge them:\n- staff_roster contains the Assigned Building field\n- building_specs contains occupancy rates per building\n- Merge on Building ID to compute Occupancy Incentive per employee\n\n## Summary Sheet Formulas\n\nThe Summary sheet's TOTAL row (row 33) must reference the quarterly totals row from `EE Calcs (Current)` at row 91. Each cell should use cross-sheet reference like: `='EE Calcs (Current)'!C91`\n\n## Verification\n\n- 8-sheet structure\n- 87 staff rows in EE Calcs\n- Quarterly totals row 91 of each EE Calcs sheet\n- Named ranges defined (at least 46)\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n# --- test_outputs.py ---\nimport pytest\nimport openpyxl\nimport os\n\nOUTPUT_FILE = '/root/Property_Management.xlsx'\n\n\nclass TestSheetStructure:\n    def test_file_exists(self):\n        assert os.path.exists(OUTPUT_FILE), f\"Output file not found: {OUTPUT_FILE}\"\n\n    def test_sheet_names(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        expected = ['Summary', 'Assumptions', 'Building Specs', 'Roster', 'Calculations --->',\n                    'EE Calcs (Current)', 'EE Calcs (Yr+1)', 'EE Calcs (Yr+2)']\n        assert wb.sheetnames == expected, f\"Expected {expected}, got {wb.sheetnames}\"\n\n    def test_named_ranges_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        assert len(wb.defined_names) >= 46, \\\n            f\"Expected >=46 named ranges, got {len(wb.defined_names)}\"\n\n    def test_summary_title(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B1'].value is not None, \"Summary B1 should contain organization name\"\n        assert ws['C5'].value == 52000, f\"Expected C5=52000, got {ws['C5'].value}\"\n        assert ws['D5'].value == '=C5*1.03', f\"Expected D5='=C5*1.03'\"\n\n    def test_ee_calcs_row_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        # 87 data rows + 1 totals = 88 rows starting at row 4\n        data_rows = sum(1 for r in ws.iter_rows(min_row=4, max_row=100, min_col=2, max_col=2) if r[0].value is not None)\n        assert data_rows >= 87, f\"Expected >=87 data rows, got {data_rows}\"\n\n    def test_quarterly_totals_row_91(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        h91 = ws.cell(row=91, column=8).value\n        assert h91 is not None, \"Row 91 (quarterly totals) should exist in EE Calcs\"\n\n    def test_summary_references_row_91(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        # Check that Summary row 33 references row 91 of EE Calcs\n        for col in [3, 4, 5]:\n            v = ws.cell(row=33, column=col).value\n            assert v is not None and '91' in str(v), \\\n                f\"Summary row 33 should reference EE Calcs row 91, got {v}\"\n\n    def test_roster_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Roster']\n        count = sum(1 for r in ws.iter_rows(min_row=5, max_row=200, min_col=2, max_col=2) if r[0].value is not None)\n        assert count >= 87, f\"Expected >=87 roster entries, got {count}\"\n\n    def test_yoy_service_progression(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws1 = wb['EE Calcs (Current)']\n        ws2 = wb['EE Calcs (Yr+1)']\n        for r in range(4, 91):\n            v1 = ws1.cell(row=r, column=6).value\n            v2 = ws2.cell(row=r, column=6).value\n            if v1 is not None and v2 is not None:\n                assert v2 == v1 + 1, f\"Yr+1 service should be +1\"\n                break\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 5,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN python3 -m pip install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5\n\nCOPY building_specs.xlsx /root/building_specs.xlsx\nCOPY staff_roster.xlsx /root/staff_roster.xlsx\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "building_specs.xlsx",
+          "staff_roster.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Compensation-Scenario-Modeling\\05_property_management_model\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Evalskill Refactor",
+            "author_email": "noreply@example.com",
+            "difficulty": "hard",
+            "category": "spreadsheet-modeling",
+            "tags": [
+              "excel",
+              "compensation",
+              "workbook",
+              "latent-skill-reuse",
+              "workflow-family"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-bec8d36f7e56327e"
+          }
+        },
+        "environment": {
+          "build_timeout_sec": 600.0,
+          "cpus": 1,
+          "memory_mb": 4096,
+          "storage_mb": 10240,
+          "docker_image": "harbor-prebuilt:task-bec8d36f7e56327e"
+        },
+        "agent_timeout_seconds": 1800.0,
+        "agent_timeout_source": "task.toml:[agent].timeout_sec",
+        "verifier_timeout_seconds": 900.0,
+        "verifier_timeout_source": "task.toml:[verifier].timeout_sec",
+        "environment_timeout_seconds": 600.0,
+        "environment_timeout_source": "task.toml:[environment].build_timeout_sec"
+      }
+    },
+    {
+      "task_id": "06_property_portfolio_refresh_model",
+      "category": "Compensation-Scenario-Modeling",
+      "family_id": "Compensation-Scenario-Modeling",
+      "description": "Build a multi-year Excel compensation workbook for a property operations team.\n\nOutput:\n\n`/root/Portfolio_Services_Compensation.xlsx`\n\nInputs:\n\n1. `/root/asset_register_packet.xlsx`\n2. `/root/operations_roster_packet.xlsx`\n\nBoth source packets include a `Packet Notes` worksheet. Those note tabs are context only and must not appear in the final workbook.\n\nRequired workbook contract:\n\n1. The workbook must contain exactly these worksheets (in this order):\n   - `Summary`\n   - `Assumptions`\n   - `Building Specs`\n   - `Roster`\n   - `Calculations --->`\n   - `EE Calcs (Current)`\n   - `EE Calcs (Yr+1)`\n   - `EE Calcs (Yr+2)`\n\n2. Read both source files and preserve their working data in the final workbook:\n   - asset / building data in `Building Specs`\n   - staff data in `Roster`\n\n3. Keep the standard 3-year property compensation structure:\n   - quarterly totals row 91 in each EE Calcs sheet\n   - summary rows for base pay, property bonus, occupancy incentive, portfolio fee, vehicle allowance, health insurance, retirement match, total, and Y/Y growth\n   - formula-linked summary references to EE Calcs totals\n\n4. Define the property assumption named ranges across all 3 years.\n\nOnly the final workbook path above is graded.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n# --- test_outputs.py ---\nimport pytest\nimport openpyxl\nimport os\n\nOUTPUT_FILE = '/root/Portfolio_Services_Compensation.xlsx'\n\n\nclass TestSheetStructure:\n    def test_file_exists(self):\n        assert os.path.exists(OUTPUT_FILE), f\"Output file not found: {OUTPUT_FILE}\"\n\n    def test_sheet_names(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        expected = ['Summary', 'Assumptions', 'Building Specs', 'Roster', 'Calculations --->',\n                    'EE Calcs (Current)', 'EE Calcs (Yr+1)', 'EE Calcs (Yr+2)']\n        assert wb.sheetnames == expected, f\"Expected {expected}, got {wb.sheetnames}\"\n\n    def test_named_ranges_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        assert len(wb.defined_names) >= 46, \\\n            f\"Expected >=46 named ranges, got {len(wb.defined_names)}\"\n\n    def test_summary_title(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B1'].value == 'Harborfront Portfolio Services - Staff Compensation'\n        assert ws['C5'].value == 52000, f\"Expected C5=52000, got {ws['C5'].value}\"\n        assert ws['D5'].value == '=C5*1.03', f\"Expected D5='=C5*1.03'\"\n\n    def test_ee_calcs_row_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        # 87 data rows + 1 totals = 88 rows starting at row 4\n        data_rows = sum(1 for r in ws.iter_rows(min_row=4, max_row=100, min_col=2, max_col=2) if r[0].value is not None)\n        assert data_rows >= 87, f\"Expected >=87 data rows, got {data_rows}\"\n\n    def test_quarterly_totals_row_91(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        h91 = ws.cell(row=91, column=8).value\n        assert h91 is not None, \"Row 91 (quarterly totals) should exist in EE Calcs\"\n\n    def test_summary_references_row_91(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        # Check that Summary row 33 references row 91 of EE Calcs\n        for col in [3, 4, 5]:\n            v = ws.cell(row=33, column=col).value\n            assert v is not None and '91' in str(v), \\\n                f\"Summary row 33 should reference EE Calcs row 91, got {v}\"\n\n    def test_roster_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Roster']\n        count = sum(1 for r in ws.iter_rows(min_row=5, max_row=200, min_col=2, max_col=2) if r[0].value is not None)\n        assert count >= 87, f\"Expected >=87 roster entries, got {count}\"\n\n    def test_yoy_service_progression(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws1 = wb['EE Calcs (Current)']\n        ws2 = wb['EE Calcs (Yr+1)']\n        for r in range(4, 91):\n            v1 = ws1.cell(row=r, column=6).value\n            v2 = ws2.cell(row=r, column=6).value\n            if v1 is not None and v2 is not None:\n                assert v2 == v1 + 1, f\"Yr+1 service should be +1\"\n                break\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 6,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN python3 -m pip install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5\n\nCOPY asset_register_packet.xlsx /root/asset_register_packet.xlsx\nCOPY operations_roster_packet.xlsx /root/operations_roster_packet.xlsx\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "asset_register_packet.xlsx",
+          "operations_roster_packet.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Compensation-Scenario-Modeling\\06_property_portfolio_refresh_model\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Evalskill Refactor",
+            "author_email": "noreply@example.com",
+            "difficulty": "hard",
+            "category": "spreadsheet-modeling",
+            "tags": [
+              "excel",
+              "compensation",
+              "workbook",
+              "latent-skill-reuse",
+              "workflow-family"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-aac1a2ba1b2f52d4"
+          }
+        },
+        "environment": {
+          "build_timeout_sec": 600.0,
+          "cpus": 1,
+          "memory_mb": 4096,
+          "storage_mb": 10240,
+          "docker_image": "harbor-prebuilt:task-aac1a2ba1b2f52d4"
+        },
+        "agent_timeout_seconds": 1800.0,
+        "agent_timeout_source": "task.toml:[agent].timeout_sec",
+        "verifier_timeout_seconds": 900.0,
+        "verifier_timeout_source": "task.toml:[verifier].timeout_sec",
+        "environment_timeout_seconds": 600.0,
+        "environment_timeout_source": "task.toml:[environment].build_timeout_sec"
+      }
+    },
+    {
+      "task_id": "07_airline_crew_model",
+      "category": "Compensation-Scenario-Modeling",
+      "family_id": "Compensation-Scenario-Modeling",
+      "description": "# Harbor Task: Airline Crew Compensation Model\n\n## Objective\n\nBuild a multi-year Excel compensation workbook for an airline's flight crew.\n\n## Output\n\n`/root/Airline_Crew_Compensation.xlsx`\n\n## Input\n\n`/root/airline_assumptions_and_roster.xlsx`\n\n## Sheet Structure (exact 7 sheets, in this order)\n\n1. `Summary` — Executive dashboard\n2. `Assumptions` — All model parameters\n3. `Roster` — Full flight crew roster (65 crew members)\n4. `Calculations --->` — Navigation helper\n5. `EE Calcs (Current)` — Year 1 calculations (rows 4–68, quarterly totals row 69)\n6. `EE Calcs (Yr+1)` — Year 2 calculations\n7. `EE Calcs (Yr+2)` — Year 3 calculations\n\n## Compensation Components (7 components, rows 26–32 in Summary)\n\n| Row | Component | Description |\n|-----|-----------|-------------|\n| 26 | Base Salary | Annual salary ÷ 4 |\n| 27 | Flight Pay Premium | Annual block hours × FPP rate ÷ 4 |\n| 28 | Per Diem | $75/day × 200 cap days ÷ 4, IF attendance >= 85% |\n| 29 | Hotel Stipend | Annual ÷ 4 |\n| 30 | Uniform Allowance | Annual ÷ 4 |\n| 31 | Loyalty Bonus | 5-tier based on years of service |\n| 32 | TOTAL | Formula-driven |\n| 33 | Y/Y Growth | Formula-driven |\n\n## Key Conditional Logic\n\n### Conditional Per-Diem\nFormula: `IF(attendance_rate >= 0.85, per_diem_amount, 0)`\n\n### 5-Tier Loyalty Bonus\n| Years of Service | Tier | Annual Bonus |\n|-----------------|------|-------------|\n| 3-5 | Bronze | $2500 |\n| 6-10 | Silver | $6000 |\n| 11-15 | Gold | $10000 |\n| 16-20 | Platinum | $16000 |\n| 20+ | Diamond | $25000 |\n\n## Named Ranges\n\nDefine: BaseSal_Yr1, BaseSal_Yr2, BaseSal_Yr3, FPP_Yr1, FPP_Yr2, FPP_Yr3, PerDiem_Yr1, PerDiem_Yr2, PerDiem_Yr3, PDCap_Yr1, PDCap_Yr2, PDCap_Yr3, PDThresh_Yr1, PDThresh_Yr2, PDThresh_Yr3, HotelStip_Yr1, HotelStip_Yr2, HotelStip_Yr3, UnifAll_Yr1, UnifAll_Yr2, UnifAll_Yr3, Loy1Rate_Yr1, Loy1Rate_Yr2, Loy1Rate_Yr3, Loy2Rate_Yr1, Loy2Rate_Yr2, Loy2Rate_Yr3, Loy3Rate_Yr1, Loy3Rate_Yr2, Loy3Rate_Yr3, Loy4Rate_Yr1, Loy4Rate_Yr2, Loy4Rate_Yr3, Loy5Rate_Yr1, Loy5Rate_Yr2, Loy5Rate_Yr3, HlthIns_Yr1, HlthIns_Yr2, HlthIns_Yr3, RetRate_Yr1, RetRate_Yr2, RetRate_Yr3, WHLim_Yr1, WHLim_Yr2, WHLim_Yr3, SSRate_Yr1, SSRate_Yr2, SSRate_Yr3, MedRate_Yr1, MedRate_Yr2, MedRate_Yr3, Sr5to9_Yr1, Sr5to9_Yr2, Sr5to9_Yr3, Sr10to14_Yr1, Sr10to14_Yr2, Sr10to14_Yr3, Sr15to19_Yr1, Sr15to19_Yr2, Sr15to19_Yr3, Sr20to24_Yr1, Sr20to24_Yr2, Sr20to24_Yr3, Sr25up_Yr1, Sr25up_Yr2, Sr25up_Yr3\n\n## Summary Sheet Formulas\n\nThe Summary sheet's TOTAL row (row 32) must reference the quarterly totals row from `EE Calcs (Current)` at row 69. Each cell should use cross-sheet reference like: `='EE Calcs (Current)'!C69`\n\n## Verification\n\n- 7-sheet structure\n- 65 crew rows in EE Calcs\n- Quarterly totals row 69 of each EE Calcs sheet\n- Named ranges defined (at least 65)\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n# --- test_outputs.py ---\nimport pytest\nimport openpyxl\nimport os\n\nOUTPUT_FILE = '/root/Airline_Crew_Compensation.xlsx'\n\n\nclass TestSheetStructure:\n    def test_file_exists(self):\n        assert os.path.exists(OUTPUT_FILE), f\"Output file not found: {OUTPUT_FILE}\"\n\n    def test_sheet_names(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        expected = ['Summary', 'Assumptions', 'Roster', 'Calculations --->',\n                    'EE Calcs (Current)', 'EE Calcs (Yr+1)', 'EE Calcs (Yr+2)']\n        assert wb.sheetnames == expected, f\"Expected {expected}, got {wb.sheetnames}\"\n\n    def test_named_ranges_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        assert len(wb.defined_names) >= 65, \\\n            f\"Expected >=65 named ranges, got {len(wb.defined_names)}\"\n\n    def test_summary_title(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B1'].value is not None, \"Summary B1 should contain organization name\"\n        assert ws['C5'].value == 78000, f\"Expected C5=78000, got {ws['C5'].value}\"\n        assert ws['D5'].value == '=C5*1.03', f\"Expected D5='=C5*1.03'\"\n\n    def test_ee_calcs_row_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        # 65 data rows + 1 totals = 66 rows starting at row 4\n        data_rows = sum(1 for r in ws.iter_rows(min_row=4, max_row=100, min_col=2, max_col=2) if r[0].value is not None)\n        assert data_rows >= 65, f\"Expected >=65 data rows, got {data_rows}\"\n\n    def test_quarterly_totals_row_69(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        h69 = ws.cell(row=69, column=8).value\n        assert h69 is not None, \"Row 69 (quarterly totals) should exist in EE Calcs\"\n\n    def test_summary_references_row_69(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        # Check that Summary row 32 references row 69 of EE Calcs\n        for col in [3, 4, 5]:\n            v = ws.cell(row=32, column=col).value\n            assert v is not None and '69' in str(v), \\\n                f\"Summary row 32 should reference EE Calcs row 69, got {v}\"\n\n    def test_roster_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Roster']\n        count = sum(1 for r in ws.iter_rows(min_row=5, max_row=200, min_col=2, max_col=2) if r[0].value is not None)\n        assert count >= 65, f\"Expected >=65 roster entries, got {count}\"\n\n    def test_yoy_service_progression(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws1 = wb['EE Calcs (Current)']\n        ws2 = wb['EE Calcs (Yr+1)']\n        for r in range(4, 70):\n            v1 = ws1.cell(row=r, column=6).value\n            v2 = ws2.cell(row=r, column=6).value\n            if v1 is not None and v2 is not None:\n                assert v2 == v1 + 1, f\"Yr+1 service should be +1\"\n                break\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 7,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN python3 -m pip install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5\n\nCOPY airline_assumptions_and_roster.xlsx /root/airline_assumptions_and_roster.xlsx\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "airline_assumptions_and_roster.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Compensation-Scenario-Modeling\\07_airline_crew_model\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Evalskill Refactor",
+            "author_email": "noreply@example.com",
+            "difficulty": "hard",
+            "category": "spreadsheet-modeling",
+            "tags": [
+              "excel",
+              "compensation",
+              "workbook",
+              "latent-skill-reuse",
+              "workflow-family"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-700002ec36d468e6"
+          }
+        },
+        "environment": {
+          "build_timeout_sec": 600.0,
+          "cpus": 1,
+          "memory_mb": 4096,
+          "storage_mb": 10240,
+          "docker_image": "harbor-prebuilt:task-700002ec36d468e6"
+        },
+        "agent_timeout_seconds": 1800.0,
+        "agent_timeout_source": "task.toml:[agent].timeout_sec",
+        "verifier_timeout_seconds": 900.0,
+        "verifier_timeout_source": "task.toml:[verifier].timeout_sec",
+        "environment_timeout_seconds": 600.0,
+        "environment_timeout_source": "task.toml:[environment].build_timeout_sec"
+      }
+    },
+    {
+      "task_id": "08_construction_union_model",
+      "category": "Compensation-Scenario-Modeling",
+      "family_id": "Compensation-Scenario-Modeling",
+      "description": "# Harbor Task: Construction Union Compensation Model\n\n## Objective\n\nBuild a multi-year Excel compensation workbook for Ironworkers Union Local 401 members.\n\n## Output\n\n`/root/Construction_Union.xlsx`\n\n## Inputs (THREE source files)\n\n1. `/root/union_assumptions_and_roster.xlsx` — Assumptions + Member Roster (90 members)\n2. `/root/project_codes.xlsx` — Active project codes (10 projects)\n3. `/root/member_projects.xlsx` — Member-to-project assignments\n\n## Sheet Structure (exact 7 sheets, in this order)\n\n1. `Summary` — Executive dashboard\n2. `Assumptions` — All model parameters\n3. `Roster` — Full union member roster (90 members)\n4. `Calculations --->` — Navigation helper\n5. `EE Calcs (Current)` — Year 1 calculations (rows 4–93, quarterly totals row 94)\n6. `EE Calcs (Yr+1)` — Year 2 calculations\n7. `EE Calcs (Yr+2)` — Year 3 calculations\n\n## Compensation Components (10 components, rows 26–34 in Summary)\n\n| Row | Component | Description |\n|-----|-----------|-------------|\n| 26 | Hourly Wages | Hourly rate × 2080 hrs + shift differential |\n| 27 | Fringe Benefits | Fringe rate × 2080 hrs |\n| 28 | Health Insurance | HlthRate × 2080 hrs |\n| 29 | Pension Contribution | PensRate × 2080 hrs |\n| 30 | NEBF Contribution | 3% of gross wages |\n| 31 | Training Fund | TrainRate × 2080 hrs |\n| 32 | Annuity Fund | AnnuityRate × 2080 hrs |\n| 33 | Union Dues | 2.5% of gross wages (deducted) |\n| 34 | TOTAL | Formula-driven |\n| 35 | Y/Y Growth | Formula-driven |\n\n## Apprenticeship Tier System\n\n| Tier | Hourly Rate |\n|------|------------|\n| Apprentice Yr1 | ApprenticeRate1 |\n| Apprentice Yr2 | ApprenticeRate2 |\n| Apprentice Yr3 | ApprenticeRate3 |\n| Journeyman | JourneyRate |\n| Foreman | ForemanRate |\n| General Foreman | GenForemanRate |\n\n## Shift Differentials\n\n| Shift | Differential |\n|-------|-------------|\n| Day | $0 |\n| Afternoon | $3.00/hr |\n| Night | $5.00/hr |\n\n## Multi-File Merge\n\nThe model must:\n1. Read union_assumptions_and_roster.xlsx for member data and assumptions\n2. Read project_codes.xlsx for project information\n3. Read member_projects.xlsx for member-project assignments\n4. Optionally use project data for assignment tracking\n\n## Named Ranges\n\nDefine ALL assumptions as named ranges: ApprenticeRate1_Yr1, ApprenticeRate1_Yr2, ApprenticeRate1_Yr3, ApprenticeRate2_Yr1, ApprenticeRate2_Yr2, ApprenticeRate2_Yr3, ApprenticeRate3_Yr1, ApprenticeRate3_Yr2, ApprenticeRate3_Yr3, JourneyRate_Yr1, JourneyRate_Yr2, JourneyRate_Yr3, ForemanRate_Yr1, ForemanRate_Yr2, ForemanRate_Yr3, GenForemanRate_Yr1, GenForemanRate_Yr2, GenForemanRate_Yr3, FringeRate_Yr1, FringeRate_Yr2, FringeRate_Yr3, HlthRate_Yr1, HlthRate_Yr2, HlthRate_Yr3, PensRate_Yr1, PensRate_Yr2, PensRate_Yr3, NEBFRate_Yr1, NEBFRate_Yr2, NEBFRate_Yr3, UnionDuesRate_Yr1, UnionDuesRate_Yr2, UnionDuesRate_Yr3, TrainRate_Yr1, TrainRate_Yr2, TrainRate_Yr3, AnnuityRate_Yr1, AnnuityRate_Yr2, AnnuityRate_Yr3, Shift2_Yr1, Shift2_Yr2, Shift2_Yr3, Shift3_Yr1, Shift3_Yr2, Shift3_Yr3, OTMult_Yr1, OTMult_Yr2, OTMult_Yr3, StdHours_Yr1, StdHours_Yr2, StdHours_Yr3, ToolAll_Yr1, ToolAll_Yr2, ToolAll_Yr3, WHLim_Yr1, WHLim_Yr2, WHLim_Yr3, SSRate_Yr1, SSRate_Yr2, SSRate_Yr3, MedRate_Yr1, MedRate_Yr2, MedRate_Yr3, Sr5to9_Yr1, Sr5to9_Yr2, Sr5to9_Yr3, Sr10to14_Yr1, Sr10to14_Yr2, Sr10to14_Yr3, Sr15to19_Yr1, Sr15to19_Yr2, Sr15to19_Yr3, Sr20to24_Yr1, Sr20to24_Yr2, Sr20to24_Yr3, Sr25up_Yr1, Sr25up_Yr2, Sr25up_Yr3\n\n## Summary Sheet Formulas\n\nThe Summary sheet's TOTAL row (row 34) must reference the quarterly totals row from `EE Calcs (Current)` at row 94. Each cell should use cross-sheet reference like: `='EE Calcs (Current)'!C94`\n\n## Verification\n\n- 7-sheet structure\n- 90 member rows in EE Calcs\n- Quarterly totals row 94 of each EE Calcs sheet\n- Named ranges defined (at least 85)\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n# --- test_outputs.py ---\nimport pytest\nimport openpyxl\nimport os\n\nOUTPUT_FILE = '/root/Construction_Union.xlsx'\n\n\nclass TestSheetStructure:\n    def test_file_exists(self):\n        assert os.path.exists(OUTPUT_FILE), f\"Output file not found: {OUTPUT_FILE}\"\n\n    def test_sheet_names(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        expected = ['Summary', 'Assumptions', 'Roster', 'Calculations --->',\n                    'EE Calcs (Current)', 'EE Calcs (Yr+1)', 'EE Calcs (Yr+2)']\n        assert wb.sheetnames == expected, f\"Expected {expected}, got {wb.sheetnames}\"\n\n    def test_named_ranges_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        assert len(wb.defined_names) >= 85, \\\n            f\"Expected >=85 named ranges, got {len(wb.defined_names)}\"\n\n    def test_summary_title(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B1'].value is not None, \"Summary B1 should contain organization name\"\n        assert ws['C5'].value == 48.00, f\"Expected C5=48.00, got {ws['C5'].value}\"\n        assert ws['D5'].value == '=C5*1.03', f\"Expected D5='=C5*1.03'\"\n\n    def test_summary_comp_rows(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        assert ws['B26'].value is not None, \"Summary B26 should have component label\"\n        assert ws['B34'].value is not None, \"Summary B34 should have TOTAL label\"\n\n    def test_ee_calcs_row_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        # 90 data rows + 1 totals = 91 rows starting at row 4\n        data_rows = sum(1 for r in ws.iter_rows(min_row=4, max_row=100, min_col=2, max_col=2) if r[0].value is not None)\n        assert data_rows >= 90, f\"Expected >=90 data rows, got {data_rows}\"\n\n    def test_quarterly_totals_row_94(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['EE Calcs (Current)']\n        h94 = ws.cell(row=94, column=8).value\n        assert h94 is not None, \"Row 94 (quarterly totals) should exist in EE Calcs\"\n\n    def test_summary_references_row_94(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Summary']\n        # Check that Summary row 34 references row 94 of EE Calcs\n        for col in [3, 4, 5]:\n            v = ws.cell(row=34, column=col).value\n            assert v is not None and '94' in str(v), \\\n                f\"Summary row 34 should reference EE Calcs row 94, got {v}\"\n\n    def test_roster_count(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws = wb['Roster']\n        count = sum(1 for r in ws.iter_rows(min_row=5, max_row=200, min_col=2, max_col=2) if r[0].value is not None)\n        assert count >= 90, f\"Expected >=90 roster entries, got {count}\"\n\n    def test_yoy_service_progression(self):\n        wb = openpyxl.load_workbook(OUTPUT_FILE)\n        ws1 = wb['EE Calcs (Current)']\n        ws2 = wb['EE Calcs (Yr+1)']\n        for r in range(4, 95):\n            v1 = ws1.cell(row=r, column=6).value\n            v2 = ws2.cell(row=r, column=6).value\n            if v1 is not None and v2 is not None:\n                assert v2 == v1 + 1, f\"Yr+1 service should be +1\"\n                break\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 8,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN python3 -m pip install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     openpyxl==3.1.5\n\nCOPY union_assumptions_and_roster.xlsx /root/union_assumptions_and_roster.xlsx\nCOPY project_codes.xlsx /root/project_codes.xlsx\nCOPY member_projects.xlsx /root/member_projects.xlsx\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "member_projects.xlsx",
+          "project_codes.xlsx",
+          "union_assumptions_and_roster.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Compensation-Scenario-Modeling\\08_construction_union_model\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Evalskill Refactor",
+            "author_email": "noreply@example.com",
+            "difficulty": "hard",
+            "category": "spreadsheet-modeling",
+            "tags": [
+              "excel",
+              "compensation",
+              "workbook",
+              "latent-skill-reuse",
+              "workflow-family"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-7b24a3be0a49b8d1"
+          }
+        },
+        "environment": {
+          "build_timeout_sec": 600.0,
+          "cpus": 1,
+          "memory_mb": 4096,
+          "storage_mb": 10240,
+          "docker_image": "harbor-prebuilt:task-7b24a3be0a49b8d1"
+        },
+        "agent_timeout_seconds": 1800.0,
+        "agent_timeout_source": "task.toml:[agent].timeout_sec",
+        "verifier_timeout_seconds": 900.0,
+        "verifier_timeout_source": "task.toml:[verifier].timeout_sec",
+        "environment_timeout_seconds": 600.0,
+        "environment_timeout_source": "task.toml:[environment].build_timeout_sec"
+      }
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "family_id": "report_generation",
+  "description": "同一技能 summary_report_building 的递增难度序列：从按状态计数，到求平均、排名、构建表格，最终组合成完整总结报告。",
+  "skill_name": "summary_report_building",
+  "tasks": [
+    {
+      "task_id": "report_generation_d1_count_status",
+      "category": "report_generation",
+      "family_id": "report_generation",
+      "description": "Write a Python function named `count_by_status` that takes `items` (list of dicts each with a 'status' key) and returns a dict mapping each distinct status value to the count of items with that status.",
+      "required_skills": ["summary_report_building"],
+      "difficulty": 1,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "count_by_status",
+        "test_cases": [
+          {
+            "inputs": [[{"status": "ok"}, {"status": "fail"}, {"status": "ok"}]],
+            "expected": {"ok": 2, "fail": 1},
+            "description": "按状态计数"
+          },
+          {"inputs": [[]], "expected": {}, "description": "空列表返回空dict"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 1}
+    },
+    {
+      "task_id": "report_generation_d2_average_score",
+      "category": "report_generation",
+      "family_id": "report_generation",
+      "description": "Write a Python function named `average_score` that takes `items` (list of dicts each with a numeric 'score' key) and returns the average of all 'score' values rounded to 2 decimal places. Return 0.0 for an empty list.",
+      "required_skills": ["summary_report_building"],
+      "difficulty": 2,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "average_score",
+        "test_cases": [
+          {
+            "inputs": [[{"score": 80}, {"score": 90}, {"score": 70}]],
+            "expected": 80.0,
+            "description": "三项平均"
+          },
+          {"inputs": [[]], "expected": 0.0, "description": "空列表返回0.0"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 2}
+    },
+    {
+      "task_id": "report_generation_d3_rank",
+      "category": "report_generation",
+      "family_id": "report_generation",
+      "description": "Write a Python function named `rank_items` that takes `items` (list of dicts each with 'name' and numeric 'score' keys) and returns a list of 'name' values sorted by 'score' descending (highest score first).",
+      "required_skills": ["summary_report_building"],
+      "difficulty": 3,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "rank_items",
+        "test_cases": [
+          {
+            "inputs": [[{"name": "A", "score": 70}, {"name": "B", "score": 90}, {"name": "C", "score": 80}]],
+            "expected": ["B", "C", "A"],
+            "description": "按分数降序排名"
+          },
+          {"inputs": [[{"name": "X", "score": 50}]], "expected": ["X"], "description": "单项排名"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 3}
+    },
+    {
+      "task_id": "report_generation_d4_summary_table",
+      "category": "report_generation",
+      "family_id": "report_generation",
+      "description": "Write a Python function named `build_summary_table` that takes `items` (list of dicts each with 'name' and numeric 'score' keys). Sort items by 'score' descending and return a list of dicts, each with keys 'name', 'score', and 'rank' (1 = highest score).",
+      "required_skills": ["summary_report_building"],
+      "difficulty": 4,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "build_summary_table",
+        "test_cases": [
+          {
+            "inputs": [[{"name": "A", "score": 70}, {"name": "B", "score": 90}]],
+            "expected": [{"name": "B", "score": 90, "rank": 1}, {"name": "A", "score": 70, "rank": 2}],
+            "description": "两项排名表"
+          },
+          {
+            "inputs": [[{"name": "X", "score": 50}]],
+            "expected": [{"name": "X", "score": 50, "rank": 1}],
+            "description": "单项排名表"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 4}
+    },
+    {
+      "task_id": "report_generation_d5_full_report",
+      "category": "report_generation",
+      "family_id": "report_generation",
+      "description": "Write a Python function named `generate_report` that takes `items` (list of dicts each with 'name', 'status', and numeric 'score' keys). Return a dict with keys: 'counts' (status counts, like count_by_status), 'average' (average score, like average_score), 'ranking' (list of names sorted by score descending, like rank_items), and 'table' (list of {'name','score','rank'} dicts, like build_summary_table). This combines all the skills from the previous tasks in this family into one report.",
+      "required_skills": ["summary_report_building"],
+      "difficulty": 5,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "generate_report",
+        "test_cases": [
+          {
+            "inputs": [[{"name": "A", "status": "ok", "score": 70}, {"name": "B", "status": "fail", "score": 90}]],
+            "expected": {
+              "counts": {"ok": 1, "fail": 1},
+              "average": 80.0,
+              "ranking": ["B", "A"],
+              "table": [{"name": "B", "score": 90, "rank": 1}, {"name": "A", "score": 70, "rank": 2}]
+            },
+            "description": "完整总结报告"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 5}
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+# 真实 API Key / 密钥文件——绝不提交到版本库
+.env
+.env.local
+.env.*.local
+*.key
+
+# 运行产物（可重新生成）
+__pycache__/
+*.pyc
+.pytest_cache/
+results/
+
+# 非正式调试/临时实验输出目录（正式结果统一放在 results/）
+results_*/
+tmp_cli_validation/
+
+# 调试日志
+*.log
+
+# 下载的外部数据集缓存（体积大，可通过 scripts/download_skillflow_dataset.py 重新获取）
+benchmark/cache/

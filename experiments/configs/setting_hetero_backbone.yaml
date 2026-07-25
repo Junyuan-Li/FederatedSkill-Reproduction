@@ -1,0 +1,111 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Setting 3: Heterogeneous Backbone Federated Learning
+#
+# 论文 Section 5.1 / Table 1 "Hetero-Backbone" 列：
+#   3 个不同 backbone 的 client，但共用相同的 harness（Claude Code）。
+#   验证：backbone 异构时，跨 client 技能共享的有效性。
+#
+# Backbone: Qwen3.6-Plus / GLM-5 / Kimi K2.5
+# Harness:  Claude Code（统一）
+# 服务端:   GLM-5 + Claude Code
+# ──────────────────────────────────────────────────────────────────────────────
+
+setting_name: "Hetero_Backbone_Federated"
+description: "Setting 3: Heterogeneous backbones, uniform harness (Claude Code)"
+federated: true
+
+rounds: 8
+seed: 42
+max_retry: 2  # 失败 attempt 回滚 library；不改变算法状态
+# Phase1 修正（Paper Fidelity Audit 发现并修复）：论文 Table 1
+# "Heterogeneous Backbone" 一节对每个 family 行都同时列出 Qwen/GLM/Kimi
+# 三个 backbone 的 SE/FedSkill 成功率，说明三个 client 跑的是同一批
+# family（仅 backbone 不同），而不是像下面 task_categories 那样把 20 个
+# family 拆成互不相交的子集分给不同 worker（那样会人为制造论文数据结构
+# 不支持的 D_i != D_j）。因此改用 family_curriculum + loop_over_families，
+# 不再用 HeterogeneousSampler；task_categories 字段保留作为历史记录，
+# 但不再被 _build_sampler() 读取/使用。
+sampler: "family_curriculum"
+loop_over_families: true
+rounds_per_family_mode: "family_length"  # 默认值，显式声明不依赖隐式默认
+# TASK1 修正（P0）：只跑论文定义的 20 个官方 SkillFlow family，排除
+# benchmark/families/ 下 5 个本项目自建的 legacy family（不删除磁盘文件）。
+paper_benchmark_only: true
+output_dir: "results/setting3_hetero_backbone"
+
+server:
+  backbone_model: "glm-5"                              # official merger_model
+  model_provider: "dashscope"
+  api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  api_key_env: "GLM_DASHSCOPE_API_KEY"                # Provider Key Isolation Fix: GLM 专属变量
+  merger_max_tokens: 16384
+  family_name: "hetero_backbone_family"
+
+merger_mode: "unshared"
+isolated_worker_skills: true
+sync_schedule: "every_task"
+
+# Patcher: per-worker model routing (kimi auto-resolves to temp=1.0)
+patcher:
+  temperature: 0.2
+
+# task_categories：分配给每个 worker 的 family_id 子集（HeterogeneousSampler
+# 按 Task.category 分组，real SkillFlow family 任务的 category 由
+# run_experiment.py::_build_sampler() 用 family_id 回填）。
+# 目的是让 D1 != D2 != D3（不同 client 看到不同任务分布），验证论文的
+# cross-client skill transfer；分组按主题聚类，不追求数量完全平均。
+workers:
+  - client_id: "u0"
+    backbone_model: "qwen3.6-plus"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "QWEN_DASHSCOPE_API_KEY"    # Provider Key Isolation Fix: Qwen 专属变量
+    max_context_tokens: 131072
+    is_moonshot: false
+    task_categories:                # 金融/薪酬类 family（9 个）
+      - "Compensation-Scenario-Modeling"
+      - "Financial-Statement-Rolling"
+      - "financial_analysis"
+      - "SEC-13F-Financial-Analysis"
+      - "Weighted-Risk-Assessment"
+      - "Healthcare-Cost-Benefit-Analysis"
+      - "Industry-Correlation-Analysis"
+      - "Sales-Pivot-Analysis"
+      - "Inventory-&-Finance-Integration"
+
+  - client_id: "u1"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "GLM_DASHSCOPE_API_KEY"     # Provider Key Isolation Fix: GLM 专属变量
+    max_context_tokens: 131072
+    is_moonshot: false
+    task_categories:                # 文档/报告类 family（8 个）
+      - "document_processing"
+      - "report_generation"
+      - "HWPX-Document-Automation"
+      - "PPT-Formatting-Optimization"
+      - "OCR-Data-Extraction"
+      - "Document-Fraud-Detection"
+      - "Cross-Format-Data-Reconciliation"
+      - "Medical-Data-Standardization"
+
+  - client_id: "u2"
+    backbone_model: "kimi-k2.5"
+    agent_harness: "claude-code"
+    model_provider: "moonshot"
+    api_base: "https://api.moonshot.ai/anthropic"      # Moonshot Anthropic endpoint
+    api_key_env: "MOONSHOT_API_KEY"          # Provider Key Isolation Fix: 新主变量名（原 MOONSHOT_KEY）
+    max_context_tokens: 131072
+    is_moonshot: true                                  # forces temperature >= 1.0
+    task_categories:                # 运营/数据类 family（8 个）
+      - "data_cleaning"
+      - "data_transformation"
+      - "Distribution-Center-Auditing"
+      - "DMAIC-Quality-Analysis"
+      - "Embedded-Data-Repair"
+      - "Operational-Recovery-Planning"
+      - "Production-Capacity-Planning"
+      - "Supply-Chain-Replenishment"

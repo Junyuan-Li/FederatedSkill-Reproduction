@@ -1,0 +1,60 @@
+setting_name: "Phase1_Setting2_Homogeneous_Federation_Easy_Medium"
+description: |
+  Small-scale faithful Setting2 reproduction over the complete selected
+  Easy and Medium SkillFlow families.
+federated: true
+
+rounds: 8
+seed: 42
+max_retry: 2
+sampler: "family_curriculum"
+loop_over_families: true
+rounds_per_family_mode: "family_length"
+paper_benchmark_only: true
+family_subset:
+  - "Cross-Format-Data-Reconciliation"
+  - "PPT-Formatting-Optimization"
+output_dir: "results/phase1_setting2_easy_medium_v3"
+
+server:
+  backbone_model: "glm-5"
+  model_provider: "dashscope"
+  api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+  api_key_env: "GLM_DASHSCOPE_API_KEY"
+  merger_max_tokens: 16384
+  family_name: "homo_family"
+
+merger_mode: "unshared"
+isolated_worker_skills: true
+sync_schedule: "every_task"
+
+patcher:
+  temperature: 0.2
+
+workers:
+  - client_id: "u0"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "GLM_DASHSCOPE_API_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u1"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "GLM_DASHSCOPE_API_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u2"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "GLM_DASHSCOPE_API_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false

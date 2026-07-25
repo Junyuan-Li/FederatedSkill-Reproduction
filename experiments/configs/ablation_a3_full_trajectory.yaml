@@ -1,0 +1,73 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Ablation A3: Upload Full Trajectory (no patch distillation)
+#
+# 论文 Section 6 Ablation Study (Table 4)：
+#   A3: 不进行 patch 蒸馏，直接上传完整轨迹 τ_i^t 给服务器。
+#   放弃 δ_i^t = g_i(L_i^t, B_i^t, ρ_i) 的蒸馏步骤，
+#   服务器直接从原始轨迹中提取技能（类似 FedIT / FedRAG 的思路）。
+#
+# 两个问题：
+#   1. 隐私风险：完整轨迹包含任务特定数据（task statements, test cases 等）
+#   2. 质量下降：轨迹压缩+蒸馏产生更高质量的可泛化技能
+#
+# 结论：全轨迹上传导致 SR 降低 + 通信成本大幅增加（论文 Table 4 第4行）。
+# ──────────────────────────────────────────────────────────────────────────────
+
+setting_name: "Ablation_A3_Full_Trajectory"
+description: "A3 ablation: skip patch distillation; upload full trajectory to server"
+federated: true
+
+rounds: 8
+seed: 42
+sampler: "random"
+output_dir: "results/ablation_a3_full_trajectory"
+
+# 消融：跳过 patch 蒸馏步骤
+ablation:
+  skip_patch_distillation: true    # PatchDistiller.distill() 被跳过
+  upload_full_trajectory: true     # 直接上传压缩轨迹 tokens（不蒸馏成 SKILL.md）
+  # 服务端仍运行 Stage1 + Stage2，但输入是轨迹摘要而非 skill-level patch
+  # 对比基线: setting_full_hetero.yaml
+
+server:
+  backbone_model: "glm-5"
+  model_provider: "dashscope"
+  api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+  api_key_env: "DASHSCOPE_KEY"
+  merger_max_tokens: 16384
+
+merger_mode: "unshared"
+isolated_worker_skills: true
+sync_schedule: "every_task"
+
+patcher:
+  temperature: 0.2
+  skip: true                       # 标记 distiller 跳过本地蒸馏
+
+workers:
+  - client_id: "u0"
+    backbone_model: "qwen3.6-plus"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "DASHSCOPE_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u1"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "DASHSCOPE_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u2"
+    backbone_model: "kimi-k2.5"
+    agent_harness: "claude-code"
+    model_provider: "moonshot"
+    api_base: "https://api.moonshot.ai/anthropic"
+    api_key_env: "MOONSHOT_KEY"
+    max_context_tokens: 131072
+    is_moonshot: true

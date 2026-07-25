@@ -1,0 +1,76 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Setting 2: Homogeneous Federated Learning
+#
+# 论文 Section 5.1 / Table 1 "Homo Fed" 列：
+#   3 个相同 backbone 的 client（均为 GLM-5 + Claude Code）参与联邦进化。
+#   验证：即使是同质化 client，FederatedSkill 是否比 SE 更高效。
+#
+# 服务端 backbone：GLM-5（与 client 相同，构成全同质化场景）。
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Setting 2: Homogeneous federation — 3 × GLM-5 workers, all claude-code.
+# Corresponds to official configs/2_fed_3glm_cc.local.yaml.
+# All workers share the same backbone; federation helps because tasks are
+# partitioned (replicate) and library merging catches complementary skills.
+setting_name: "Homo_Federated"
+description: "Setting 2: Homogeneous clients — 3 × GLM-5 + Claude Code"
+federated: true
+
+rounds: 8
+seed: 42
+max_retry: 2  # 失败 attempt 回滚 library；不改变算法状态
+# Phase1 修正（恢复论文原始实验单位）：3 个 worker 在每个 family 迭代里
+# 绑定同一个 family_id，按 family 循环跑完 20 个 family，而不是各自独立
+# 随机抽取任务。TASK3 修正：round 数默认等于该 family 的任务数（不再
+# 用 rounds: 8 对所有 family 静默取 min）。
+sampler: "family_curriculum"
+loop_over_families: true
+rounds_per_family_mode: "family_length"  # 默认值，显式声明不依赖隐式默认
+# TASK1 修正（P0）：只跑论文定义的 20 个官方 SkillFlow family，排除
+# benchmark/families/ 下 5 个本项目自建的 legacy family（不删除磁盘文件）。
+paper_benchmark_only: true
+output_dir: "results/setting2_homo"
+
+server:
+  backbone_model: "glm-5"                              # official merger model
+  model_provider: "dashscope"
+  api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+  api_key_env: "GLM_DASHSCOPE_API_KEY"                # Provider Key Isolation Fix: GLM 专属变量
+  merger_max_tokens: 16384                             # merger_llm.max_tokens
+  family_name: "homo_family"
+
+merger_mode: "unshared"           # each worker has own diverging library
+isolated_worker_skills: true      # partitioner=replicate
+sync_schedule: "every_task"
+
+# Official patcher config (same for all homo workers — all glm-5)
+patcher:
+  temperature: 0.2
+
+workers:
+  - client_id: "u0"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "GLM_DASHSCOPE_API_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u1"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "GLM_DASHSCOPE_API_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u2"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "GLM_DASHSCOPE_API_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false

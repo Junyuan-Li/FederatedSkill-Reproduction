@@ -1,0 +1,14 @@
+# FederatedSkill 复现依赖
+# 论文: FederatedSkill — Federated Learning for Agentic Skill Evolution
+
+# 核心框架
+pydantic>=2.8.0
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+
+# LLM 统一调用层（论文原版也使用 litellm）
+# 支持: dashscope(Qwen/GLM) / moonshot(Kimi) / anthropic(Claude) / openai
+litellm>=1.67.0,<1.85.0
+
+# 实验记录与指标
+tqdm>=4.66.0

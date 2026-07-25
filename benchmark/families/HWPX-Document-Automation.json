@@ -1,0 +1,497 @@
+{
+  "family_id": "HWPX-Document-Automation",
+  "description": "真实 SkillFlow family: HWPX-Document-Automation（8 个递增难度任务）",
+  "skill_name": "HWPX-Document-Automation",
+  "tasks": [
+    {
+      "task_id": "hwpx-supplier-contact-sheet",
+      "category": "HWPX-Document-Automation",
+      "family_id": "HWPX-Document-Automation",
+      "description": "Update the HWPX supplier contact sheet `supplier_contact_template.hwpx` using the values in `supplier_contact.json`, then save the finished file to `/root/supplier_contact_ready.hwpx`.\n\nRequirements:\n- Replace every `{{...}}` placeholder with the matching value from the JSON file.\n- Keep each Korean field label already in the document.\n- Leave the static note line unchanged.\n- No `{{...}}` placeholders may remain anywhere in the output.\n- The result must remain a valid `.hwpx` package.\n- Any paragraph whose text you modify must not retain stale layout-cache elements, so the edited document can open cleanly without overlapping characters.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nimport os\nimport re\nimport zipfile\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n\nTASK_ROOT = Path(os.environ.get(\"HWPX_TASK_ROOT\", \"/root\"))\nOUTPUT_FILE = TASK_ROOT / \"supplier_contact_ready.hwpx\"\nDATA_FILE = TASK_ROOT / \"supplier_contact.json\"\nNS = {\"hp\": \"http://www.hancom.co.kr/hwpml/2010/HWPML\"}\n\ndef load_section(hwpx_path: Path, section_name: str) -> str:\n    with zipfile.ZipFile(hwpx_path) as zf:\n        return zf.read(f\"Contents/{section_name}\").decode(\"utf-8\")\n\ndef paragraph_texts(section_xml: str):\n    root = ET.fromstring(section_xml)\n    for paragraph in root.findall(\".//hp:p\", NS):\n        yield paragraph, \"\".join((node.text or \"\") for node in paragraph.findall(\".//hp:t\", NS))\n\ndef test_output_exists_and_is_zip():\n    assert OUTPUT_FILE.exists()\n    assert zipfile.is_zipfile(OUTPUT_FILE)\n\ndef test_required_values_present_and_placeholders_removed():\n    section_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    for value in data.values():\n        assert value in section_xml\n    assert \"메모: 신규 공급사 등록용\" in section_xml\n    assert not re.search(r\"\\{\\{[^}]+\\}\\}\", section_xml)\n\ndef test_modified_paragraphs_do_not_keep_layout_cache():\n    section_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    fragments = list(data.values())\n    for paragraph, text in paragraph_texts(section_xml):\n        if any(fragment in text for fragment in fragments):\n            assert paragraph.find(\"hp:linesegarray\", NS) is None\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 1,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3 \\\n    python3-pip \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3-pytest \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest-json-ctrf==0.3.5\n\nCOPY supplier_contact_template.hwpx /root/supplier_contact_template.hwpx\nCOPY supplier_contact.json /root/supplier_contact.json\n\nWORKDIR /root\n",
+        "supplier_contact.json": "{\n  \"회사명\": \"세림 부품 주식회사\",\n  \"담당자\": \"이지현\",\n  \"직책\": \"구매 협업 매니저\",\n  \"전화번호\": \"02-555-0187\",\n  \"이메일\": \"jihyun.lee@serimparts.kr\",\n  \"주소\": \"서울특별시 금천구 벚꽃로 145 8층\",\n  \"계약시작일\": \"2026-04-01\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "supplier_contact_template.hwpx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\HWPX-Document-Automation\\hwpx-supplier-contact-sheet\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "document-editing",
+            "tags": [
+              "hwpx",
+              "xml-editing",
+              "document-processing",
+              "latent-method-reuse"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-093cfaf7a0751638"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "hwpx-event-announcement",
+      "category": "HWPX-Document-Automation",
+      "family_id": "HWPX-Document-Automation",
+      "description": "Prepare the event announcement document `event_announcement_template.hwpx` using the values in `event_data.json`, then save the result to `/root/event_announcement_ready.hwpx`.\n\nRequirements:\n- Replace every `{{...}}` placeholder with the matching value from the JSON file.\n- Keep all Korean labels and the static note line unchanged.\n- No `{{...}}` placeholder text may remain anywhere in the output.\n- The result must remain a valid `.hwpx` package.\n- Any paragraph whose text you modify must not retain stale layout-cache elements, so the edited document can open cleanly without overlapping characters.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nimport os\nimport re\nimport zipfile\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n\nTASK_ROOT = Path(os.environ.get(\"HWPX_TASK_ROOT\", \"/root\"))\nOUTPUT_FILE = TASK_ROOT / \"event_announcement_ready.hwpx\"\nDATA_FILE = TASK_ROOT / \"event_data.json\"\nNS = {\"hp\": \"http://www.hancom.co.kr/hwpml/2010/HWPML\"}\n\ndef load_section(hwpx_path: Path, section_name: str) -> str:\n    with zipfile.ZipFile(hwpx_path) as zf:\n        return zf.read(f\"Contents/{section_name}\").decode(\"utf-8\")\n\ndef paragraph_texts(section_xml: str):\n    root = ET.fromstring(section_xml)\n    for paragraph in root.findall(\".//hp:p\", NS):\n        yield paragraph, \"\".join((node.text or \"\") for node in paragraph.findall(\".//hp:t\", NS))\n\ndef test_output_exists_and_is_zip():\n    assert OUTPUT_FILE.exists()\n    assert zipfile.is_zipfile(OUTPUT_FILE)\n\ndef test_required_values_present_and_placeholders_removed():\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    section_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    for value in data.values():\n        assert value in section_xml\n    assert \"비고: 사전 신청 필수\" in section_xml\n    assert not re.search(r\"\\{\\{[^}]+\\}\\}\", section_xml)\n\ndef test_modified_paragraphs_do_not_keep_layout_cache():\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    fragments = list(data.values())\n    section_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    for paragraph, text in paragraph_texts(section_xml):\n        if any(fragment in text for fragment in fragments):\n            assert paragraph.find(\"hp:linesegarray\", NS) is None\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 2,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3 \\\n    python3-pip \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3-pytest \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest-json-ctrf==0.3.5\n\nCOPY event_announcement_template.hwpx /root/event_announcement_template.hwpx\nCOPY event_data.json /root/event_data.json\n\nWORKDIR /root\n",
+        "event_data.json": "{\n  \"행사명\": \"2026년 하반기 전사 워크숍\",\n  \"행사일시\": \"2026-10-15 (목) 09:00-18:00\",\n  \"장소\": \"경기도 성남시 분당구 대왕판교로 660 그랜드볼룸\",\n  \"주관부서\": \"인재개발팀\",\n  \"대상\": \"전 임직원 (필수 참석)\",\n  \"참가비\": \"무료 (회사 지원)\",\n  \"신청마감\": \"2026-10-05 18:00까지\",\n  \"문의처\": \"인재개발팀 김민지 (내선 2345, minji.kim@company.kr)\",\n  \"상세내용\": \"2026년 하반기 경영 전략 공유 및 팀 빌딩 프로그램 진행. 오전은 경영진 발표, 오후는 부서별 워크숍으로 구성됩니다.\",\n  \"주의사항\": \"참석 불가자는 사전에 부서장 승인을 받아 인재개발팀에 통보 바랍니다.\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "event_announcement_template.hwpx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\HWPX-Document-Automation\\hwpx-event-announcement\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "document-editing",
+            "tags": [
+              "hwpx",
+              "xml-editing",
+              "document-processing",
+              "latent-method-reuse"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-d039e3807dc11678"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "hwpx-clinic-intake-summary",
+      "category": "HWPX-Document-Automation",
+      "family_id": "HWPX-Document-Automation",
+      "description": "Finish the clinic intake summary `clinic_intake_template.hwpx` with the values in `patient_intake.json` and save the result to `/root/clinic_intake_ready.hwpx`.\n\nRequirements:\n- Replace every placeholder in the document, including repeated occurrences such as the patient-name confirmation line.\n- Add an age note after the birth date using Korean full-year age as of the visit date, formatted as `(<N>세)`.\n- Normalize the callback phone number to digits only with hyphen groups in `000-0000-0000` form.\n- Keep the existing Korean labels and the handwritten-signature note.\n- No `{{...}}` placeholder text may remain anywhere in the output.\n- The result must remain a valid `.hwpx` package.\n- Any paragraph whose text you modify must not retain stale layout-cache elements, so the edited document can open cleanly without overlapping characters.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nimport os\nimport re\nimport zipfile\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n\nTASK_ROOT = Path(os.environ.get(\"HWPX_TASK_ROOT\", \"/root\"))\nOUTPUT_FILE = TASK_ROOT / \"clinic_intake_ready.hwpx\"\nDATA_FILE = TASK_ROOT / \"patient_intake.json\"\nNS = {\"hp\": \"http://www.hancom.co.kr/hwpml/2010/HWPML\"}\n\ndef load_section(hwpx_path: Path, section_name: str) -> str:\n    with zipfile.ZipFile(hwpx_path) as zf:\n        return zf.read(f\"Contents/{section_name}\").decode(\"utf-8\")\n\ndef paragraph_texts(section_xml: str):\n    root = ET.fromstring(section_xml)\n    for paragraph in root.findall(\".//hp:p\", NS):\n        yield paragraph, \"\".join((node.text or \"\") for node in paragraph.findall(\".//hp:t\", NS))\n\ndef test_output_exists_and_is_zip():\n    assert OUTPUT_FILE.exists()\n    assert zipfile.is_zipfile(OUTPUT_FILE)\n\ndef test_required_values_present_and_repeated_value_updated():\n    section_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    assert data[\"환자명\"] in section_xml\n    assert f'{data[\"생년월일\"]} (35세)' in section_xml\n    assert data[\"방문일\"] in section_xml\n    assert data[\"진료팀\"] in section_xml\n    assert \"010-4421-7783\" in section_xml\n    assert data[\"증상요약\"] in section_xml\n    assert data[\"보험상태\"] in section_xml\n    assert section_xml.count(data[\"환자명\"]) >= 2\n    assert \"확인 메모: 수기 서명 칸은 비워 두세요.\" in section_xml\n    assert not re.search(r\"\\{\\{[^}]+\\}\\}\", section_xml)\n\ndef test_modified_paragraphs_do_not_keep_layout_cache():\n    section_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    fragments = [\n        data[\"환자명\"],\n        f'{data[\"생년월일\"]} (35세)',\n        data[\"방문일\"],\n        data[\"진료팀\"],\n        \"010-4421-7783\",\n        data[\"증상요약\"],\n        data[\"보험상태\"],\n    ]\n    for paragraph, text in paragraph_texts(section_xml):\n        if any(fragment in text for fragment in fragments):\n            assert paragraph.find(\"hp:linesegarray\", NS) is None\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 3,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3 \\\n    python3-pip \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3-pytest \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest-json-ctrf==0.3.5\n\nCOPY clinic_intake_template.hwpx /root/clinic_intake_template.hwpx\nCOPY patient_intake.json /root/patient_intake.json\n\nWORKDIR /root\n",
+        "patient_intake.json": "{\n  \"환자명\": \"박서윤\",\n  \"생년월일\": \"1990-11-02\",\n  \"방문일\": \"2026-05-09\",\n  \"진료팀\": \"호흡기내과\",\n  \"회신전화\": \"010-4421-7783\",\n  \"증상요약\": \"기침과 야간 호흡곤란이 5일째 지속됨\",\n  \"보험상태\": \"직장 가입자\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "clinic_intake_template.hwpx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\HWPX-Document-Automation\\hwpx-clinic-intake-summary\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "document-editing",
+            "tags": [
+              "hwpx",
+              "xml-editing",
+              "document-processing",
+              "latent-method-reuse"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-1437de12555655eb"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "hwpx-project-proposal",
+      "category": "HWPX-Document-Automation",
+      "family_id": "HWPX-Document-Automation",
+      "description": "Complete the project proposal document `project_proposal_template.hwpx` using the values in `project_proposal.json`, then save the result to `/root/project_proposal_ready.hwpx`.\n\nRequirements:\n- Replace every `{{...}}` placeholder with the matching value from the JSON file across both sections.\n- In addition to filling placeholders, append a parenthesized month span after each phase line using the corresponding date range already written in that line: `단계1` -> `(3개월)`, `단계2` -> `(3개월)`, `단계3` -> `(1개월)`.\n- Normalize the budget value to remove commas before writing it into the document, while keeping the leading currency symbol.\n- Keep all Korean labels and the static note line unchanged.\n- No `{{...}}` placeholder text may remain anywhere in the output.\n- The result must remain a valid `.hwpx` package.\n- Any paragraph whose text you modify must not retain stale layout-cache elements, so the edited document can open cleanly without overlapping characters.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nimport os\nimport re\nimport zipfile\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n\nTASK_ROOT = Path(os.environ.get(\"HWPX_TASK_ROOT\", \"/root\"))\nOUTPUT_FILE = TASK_ROOT / \"project_proposal_ready.hwpx\"\nDATA_FILE = TASK_ROOT / \"project_proposal.json\"\nNS = {\"hp\": \"http://www.hancom.co.kr/hwpml/2010/HWPML\"}\n\ndef load_section(hwpx_path: Path, section_name: str) -> str:\n    with zipfile.ZipFile(hwpx_path) as zf:\n        return zf.read(f\"Contents/{section_name}\").decode(\"utf-8\")\n\ndef paragraph_texts(section_xml: str):\n    root = ET.fromstring(section_xml)\n    for paragraph in root.findall(\".//hp:p\", NS):\n        yield paragraph, \"\".join((node.text or \"\") for node in paragraph.findall(\".//hp:t\", NS))\n\ndef test_output_exists_and_is_zip():\n    assert OUTPUT_FILE.exists()\n    assert zipfile.is_zipfile(OUTPUT_FILE)\n\ndef test_required_values_present_and_placeholders_removed():\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    section0_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    section1_xml = load_section(OUTPUT_FILE, \"section1.xml\")\n    combined = section0_xml + section1_xml\n    for key, value in data.items():\n        if key == \"예산\":\n            normalized = value.replace(\",\", \"\")\n            assert normalized in combined\n            assert value not in combined\n        elif key == \"단계1\":\n            assert f\"{value} (3개월)\" in combined\n        elif key == \"단계2\":\n            assert f\"{value} (3개월)\" in combined\n        elif key == \"단계3\":\n            assert f\"{value} (1개월)\" in combined\n        else:\n            assert value in combined\n    assert \"비고: 내부 검토용\" in section0_xml\n    assert not re.search(r\"\\{\\{[^}]+\\}\\}\", combined)\n\ndef test_modified_paragraphs_do_not_keep_layout_cache():\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    fragments = []\n    for key, value in data.items():\n        if key == \"예산\":\n            fragments.append(value.replace(\",\", \"\"))\n        elif key == \"단계1\":\n            fragments.append(f\"{value} (3개월)\")\n        elif key == \"단계2\":\n            fragments.append(f\"{value} (3개월)\")\n        elif key == \"단계3\":\n            fragments.append(f\"{value} (1개월)\")\n        else:\n            fragments.append(value)\n    for section_name in (\"section0.xml\", \"section1.xml\"):\n        section_xml = load_section(OUTPUT_FILE, section_name)\n        for paragraph, text in paragraph_texts(section_xml):\n            if any(fragment in text for fragment in fragments):\n                assert paragraph.find(\"hp:linesegarray\", NS) is None\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 4,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3 \\\n    python3-pip \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3-pytest \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest-json-ctrf==0.3.5\n\nCOPY project_proposal_template.hwpx /root/project_proposal_template.hwpx\nCOPY project_proposal.json /root/project_proposal.json\n\nWORKDIR /root\n",
+        "project_proposal.json": "{\n  \"프로젝트명\": \"스마트 워크플로우 자동화\",\n  \"담당부서\": \"디지털 혁신실\",\n  \"제안일\": \"2026-07-15\",\n  \"예산\": \"₩450,000,000\",\n  \"시작일\": \"2026-08-01\",\n  \"종료일\": \"2027-01-31\",\n  \"주요목표\": \"업무 프로세스 자동화로 연간 30% 생산성 향상\",\n  \"예상효과\": \"인력 운영 비용 절감 및 업무 오류 감소\",\n  \"단계1\": \"요구사항 분석 및 설계 (2026-08 ~ 2026-10)\",\n  \"단계2\": \"시스템 개발 및 테스트 (2026-10 ~ 2026-12)\",\n  \"단계3\": \"파일럿 운영 및 안정화 (2027-01)\",\n  \"검토자\": \"최수민 차장\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "project_proposal_template.hwpx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\HWPX-Document-Automation\\hwpx-project-proposal\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "document-editing",
+            "tags": [
+              "hwpx",
+              "xml-editing",
+              "document-processing",
+              "latent-method-reuse"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-6f9cc0bd2badad10"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "hwpx-training-feedback",
+      "category": "HWPX-Document-Automation",
+      "family_id": "HWPX-Document-Automation",
+      "description": "Fill in the training feedback sheet `training_feedback_template.hwpx` using the values in `training_feedback.json`, then save the result to `/root/training_feedback_ready.hwpx`.\n\nRequirements:\n- Replace every `{{...}}` placeholder with the matching value from the JSON file across both sections.\n- Convert `참석자수` into digits only before writing it.\n- Rewrite `만족도` as `4.5점 (5.0점 만점)` style, preserving the numeric score from the JSON.\n- In the final overall-opinion sentence, append `후속 심화반 검토 요망.` after the provided comment.\n- Keep all Korean labels and the static note line unchanged.\n- No `{{...}}` placeholder text may remain anywhere in the output.\n- The result must remain a valid `.hwpx` package.\n- Any paragraph whose text you modify must not retain stale layout-cache elements, so the edited document can open cleanly without overlapping characters.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nimport os\nimport re\nimport zipfile\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n\nTASK_ROOT = Path(os.environ.get(\"HWPX_TASK_ROOT\", \"/root\"))\nOUTPUT_FILE = TASK_ROOT / \"training_feedback_ready.hwpx\"\nDATA_FILE = TASK_ROOT / \"training_feedback.json\"\nNS = {\"hp\": \"http://www.hancom.co.kr/hwpml/2010/HWPML\"}\n\ndef load_section(hwpx_path: Path, section_name: str) -> str:\n    with zipfile.ZipFile(hwpx_path) as zf:\n        return zf.read(f\"Contents/{section_name}\").decode(\"utf-8\")\n\ndef paragraph_texts(section_xml: str):\n    root = ET.fromstring(section_xml)\n    for paragraph in root.findall(\".//hp:p\", NS):\n        yield paragraph, \"\".join((node.text or \"\") for node in paragraph.findall(\".//hp:t\", NS))\n\ndef test_output_exists_and_is_zip():\n    assert OUTPUT_FILE.exists()\n    assert zipfile.is_zipfile(OUTPUT_FILE)\n\ndef test_required_values_present_and_placeholders_removed():\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    section0_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    section1_xml = load_section(OUTPUT_FILE, \"section1.xml\")\n    combined = section0_xml + section1_xml\n    transformed = {\n        **data,\n        \"참석자수\": \"32\",\n        \"만족도\": \"4.5점 (5.0점 만점)\",\n        \"종합의견\": data[\"종합의견\"] + \" 후속 심화반 검토 요망.\",\n    }\n    for key, value in transformed.items():\n        assert value in combined\n    assert \"32명\" not in combined\n    assert \"4.5/5.0\" not in combined\n    assert \"비고: 익명 수집됨\" in section0_xml\n    assert not re.search(r\"\\{\\{[^}]+\\}\\}\", combined)\n\ndef test_modified_paragraphs_do_not_keep_layout_cache():\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    fragments = [\n        data[\"교육명\"],\n        data[\"교육일시\"],\n        data[\"장소\"],\n        data[\"강사\"],\n        \"32\",\n        \"4.5점 (5.0점 만점)\",\n        data[\"유익내용\"],\n        data[\"개선사항\"],\n        data[\"희망교육\"],\n        data[\"강사평가\"],\n        data[\"자료평가\"],\n        data[\"실습평가\"],\n        data[\"종합의견\"] + \" 후속 심화반 검토 요망.\",\n    ]\n    for section_name in (\"section0.xml\", \"section1.xml\"):\n        section_xml = load_section(OUTPUT_FILE, section_name)\n        for paragraph, text in paragraph_texts(section_xml):\n            if any(fragment in text for fragment in fragments):\n                assert paragraph.find(\"hp:linesegarray\", NS) is None\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 5,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3 \\\n    python3-pip \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3-pytest \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest-json-ctrf==0.3.5\n\nCOPY training_feedback_template.hwpx /root/training_feedback_template.hwpx\nCOPY training_feedback.json /root/training_feedback.json\n\nWORKDIR /root\n",
+        "training_feedback.json": "{\n  \"교육명\": \"데이터 분석 기초 실무\",\n  \"교육일시\": \"2026-09-10 09:00-18:00\",\n  \"장소\": \"서울 강남구 테헤란로 123 ABC교육센터 5층\",\n  \"강사\": \"박준혁 수석\",\n  \"참석자수\": \"32명\",\n  \"만족도\": \"4.5/5.0\",\n  \"유익내용\": \"실시간 데이터 시각화와 대시보드 구축 실습\",\n  \"개선사항\": \"심화 과정 추가 요청 및 실습 시간 확대\",\n  \"희망교육\": \"Python을 활용한 고급 데이터 분석\",\n  \"강사평가\": \"매우 우수\",\n  \"자료평가\": \"우수\",\n  \"실습평가\": \"보통\",\n  \"종합의견\": \"기초 개념 설명이 명확했으나 실습 난이도 조정이 필요합니다.\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "training_feedback_template.hwpx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\HWPX-Document-Automation\\hwpx-training-feedback\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "document-editing",
+            "tags": [
+              "hwpx",
+              "xml-editing",
+              "document-processing",
+              "latent-method-reuse"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-8003dea45d266de0"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "hwpx-safety-audit-brief",
+      "category": "HWPX-Document-Automation",
+      "family_id": "HWPX-Document-Automation",
+      "description": "Prepare the warehouse safety audit brief `safety_audit_template.hwpx` using both `audit_overview.json` and `corrective_actions.json`, then save it to `/root/safety_audit_brief_final.hwpx`.\n\nRequirements:\n- Fill the overview fields in the summary section and the value cells in the audit table.\n- Fill the three corrective-action lines in the same order they appear in `corrective_actions.json`.\n- Update every occurrence of the risk tier.\n- Rewrite the inspection date from `YYYY-MM-DD` to `YYYY.MM.DD` everywhere it appears.\n- Add a short severity note immediately after the risk tier using this mapping: `High -> 즉시조치`, `Medium -> 계획보완`, `Low -> 모니터링`.\n- Keep the existing section titles and row labels.\n- Do not leave any `{{...}}` placeholder text anywhere in either section.\n- The result must remain a valid `.hwpx` package.\n- Any paragraph whose text you modify must not retain stale layout-cache elements, so the edited document can open cleanly without overlapping characters.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nimport os\nimport re\nimport zipfile\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n\nTASK_ROOT = Path(os.environ.get(\"HWPX_TASK_ROOT\", \"/root\"))\nOUTPUT_FILE = TASK_ROOT / \"safety_audit_brief_final.hwpx\"\nOVERVIEW_FILE = TASK_ROOT / \"audit_overview.json\"\nACTIONS_FILE = TASK_ROOT / \"corrective_actions.json\"\nNS = {\"hp\": \"http://www.hancom.co.kr/hwpml/2010/HWPML\"}\n\ndef load_section(hwpx_path: Path, section_name: str) -> str:\n    with zipfile.ZipFile(hwpx_path) as zf:\n        return zf.read(f\"Contents/{section_name}\").decode(\"utf-8\")\n\ndef paragraph_texts(section_xml: str):\n    root = ET.fromstring(section_xml)\n    for paragraph in root.findall(\".//hp:p\", NS):\n        yield paragraph, \"\".join((node.text or \"\") for node in paragraph.findall(\".//hp:t\", NS))\n\ndef test_output_exists_and_is_zip():\n    assert OUTPUT_FILE.exists()\n    assert zipfile.is_zipfile(OUTPUT_FILE)\n\ndef test_overview_values_and_actions_are_present():\n    section0_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    section1_xml = load_section(OUTPUT_FILE, \"section1.xml\")\n    combined = section0_xml + section1_xml\n    overview = json.loads(OVERVIEW_FILE.read_text(encoding=\"utf-8\"))[\"summary\"]\n    actions = json.loads(ACTIONS_FILE.read_text(encoding=\"utf-8\"))[\"immediate_actions\"]\n    severity_map = {\"High\": \"즉시조치\", \"Medium\": \"계획보완\", \"Low\": \"모니터링\"}\n    for key, value in overview.items():\n        if key == \"점검일\":\n            assert value.replace(\"-\", \".\") in combined\n        elif key == \"위험등급\":\n            assert f'{value} ({severity_map[value]})' in combined\n        else:\n            assert value in combined\n    for action in actions:\n        assert action in section1_xml\n    assert \"현장명\" in section0_xml\n    assert \"위험 등급\" in section0_xml\n    assert not re.search(r\"\\{\\{[^}]+\\}\\}\", combined)\n\ndef test_actions_keep_source_order():\n    section1_xml = load_section(OUTPUT_FILE, \"section1.xml\")\n    actions = json.loads(ACTIONS_FILE.read_text(encoding=\"utf-8\"))[\"immediate_actions\"]\n    indexes = [section1_xml.index(action) for action in actions]\n    assert indexes == sorted(indexes)\n\ndef test_modified_paragraphs_do_not_keep_layout_cache():\n    section0_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    section1_xml = load_section(OUTPUT_FILE, \"section1.xml\")\n    overview = json.loads(OVERVIEW_FILE.read_text(encoding=\"utf-8\"))[\"summary\"]\n    actions = json.loads(ACTIONS_FILE.read_text(encoding=\"utf-8\"))[\"immediate_actions\"]\n    severity_map = {\"High\": \"즉시조치\", \"Medium\": \"계획보완\", \"Low\": \"모니터링\"}\n    fragments = []\n    for key, value in overview.items():\n        if key == \"점검일\":\n            fragments.append(value.replace(\"-\", \".\"))\n        elif key == \"위험등급\":\n            fragments.append(f'{value} ({severity_map[value]})')\n        else:\n            fragments.append(value)\n    fragments.extend(actions)\n    for section_xml in (section0_xml, section1_xml):\n        for paragraph, text in paragraph_texts(section_xml):\n            if any(fragment in text for fragment in fragments):\n                assert paragraph.find(\"hp:linesegarray\", NS) is None\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 6,
+      "dependencies": [],
+      "files": {
+        "audit_overview.json": "{\n  \"summary\": {\n    \"점검ID\": \"SAF-26-041\",\n    \"현장명\": \"부산 서부 냉장 창고\",\n    \"주관점검자\": \"김도윤\",\n    \"점검일\": \"2026-06-18\",\n    \"위험등급\": \"High\",\n    \"총평\": \"하역 구역 동선 분리가 미완료되어 즉시 조치가 필요합니다.\",\n    \"보고대상\": \"권역 운영실장\"\n  }\n}\n",
+        "corrective_actions.json": "{\n  \"immediate_actions\": [\n    \"지게차 충전 구역 주변 적치물을 오늘 안에 제거\",\n    \"보행자 동선을 바닥 표시로 재구획\",\n    \"야간 근무조 대상 안전 브리핑을 재실시\"\n  ]\n}\n",
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3 \\\n    python3-pip \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3-pytest \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest-json-ctrf==0.3.5\n\nCOPY safety_audit_template.hwpx /root/safety_audit_template.hwpx\nCOPY audit_overview.json /root/audit_overview.json\nCOPY corrective_actions.json /root/corrective_actions.json\n\nWORKDIR /root\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "safety_audit_template.hwpx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\HWPX-Document-Automation\\hwpx-safety-audit-brief\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "document-editing",
+            "tags": [
+              "hwpx",
+              "xml-editing",
+              "document-processing",
+              "latent-method-reuse"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-03aac4029cfcef4f"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "hwpx-renewal-playbook-update",
+      "category": "HWPX-Document-Automation",
+      "family_id": "HWPX-Document-Automation",
+      "description": "Revise the existing renewal playbook `renewal_playbook.hwpx` using `renewal_update.json` and `followups.csv`, then save the updated file to `/root/renewal_playbook_updated.hwpx`.\n\nRequirements:\n- Update the customer name, current owner, renewal window, pricing band, escalation contact, and pricing note everywhere they appear in the editable sections.\n- Replace the three follow-up lines with the CSV items in `sequence` order.\n- Remove the old values rather than adding duplicate lines beside them.\n- Keep the appendix sentence `이 부록 문단은 그대로 유지해야 합니다.` unchanged.\n- The result must remain a valid `.hwpx` package.\n- Any paragraph whose text you modify must not retain stale layout-cache elements, so the edited document can open cleanly without overlapping characters.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport csv\nimport json\nimport os\nimport zipfile\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n\nTASK_ROOT = Path(os.environ.get(\"HWPX_TASK_ROOT\", \"/root\"))\nOUTPUT_FILE = TASK_ROOT / \"renewal_playbook_updated.hwpx\"\nUPDATE_FILE = TASK_ROOT / \"renewal_update.json\"\nFOLLOWUPS_FILE = TASK_ROOT / \"followups.csv\"\nNS = {\"hp\": \"http://www.hancom.co.kr/hwpml/2010/HWPML\"}\n\ndef load_section(hwpx_path: Path, section_name: str) -> str:\n    with zipfile.ZipFile(hwpx_path) as zf:\n        return zf.read(f\"Contents/{section_name}\").decode(\"utf-8\")\n\ndef paragraph_texts(section_xml: str):\n    root = ET.fromstring(section_xml)\n    for paragraph in root.findall(\".//hp:p\", NS):\n        yield paragraph, \"\".join((node.text or \"\") for node in paragraph.findall(\".//hp:t\", NS))\n\ndef followup_items():\n    with FOLLOWUPS_FILE.open(encoding=\"utf-8\") as handle:\n        reader = csv.DictReader(handle)\n        rows = sorted(reader, key=lambda row: int(row[\"sequence\"]))\n    return [row[\"item\"] for row in rows]\n\ndef test_output_exists_and_is_zip():\n    assert OUTPUT_FILE.exists()\n    assert zipfile.is_zipfile(OUTPUT_FILE)\n\ndef test_required_updates_present_and_old_values_removed():\n    update = json.loads(UPDATE_FILE.read_text(encoding=\"utf-8\"))\n    section0_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    section1_xml = load_section(OUTPUT_FILE, \"section1.xml\")\n    new_window = f'{update[\"window_start\"]} ~ {update[\"window_end\"]}'\n    required = [\n        update[\"customer\"],\n        update[\"owner_name\"],\n        new_window,\n        update[\"band\"],\n        update[\"escalation_email\"],\n        update[\"note\"],\n        *followup_items(),\n    ]\n    for value in required:\n        assert value in section0_xml or value in section1_xml\n    for old_value in [\n        \"Northwind Retail\",\n        \"이전담당자\",\n        \"2025-04-01 ~ 2025-04-15\",\n        \"Standard-18M\",\n        \"ops-old@northwind.example\",\n        \"기존 메모를 새 메모로 바꾸세요.\",\n        \"old follow-up alpha\",\n        \"old follow-up beta\",\n        \"old follow-up gamma\",\n    ]:\n        assert old_value not in section0_xml + section1_xml\n\ndef test_followups_keep_csv_order_and_appendix_is_preserved():\n    section1_xml = load_section(OUTPUT_FILE, \"section1.xml\")\n    items = followup_items()\n    indexes = [section1_xml.index(item) for item in items]\n    assert indexes == sorted(indexes)\n    assert \"이 부록 문단은 그대로 유지해야 합니다.\" in section1_xml\n\ndef test_modified_paragraphs_do_not_keep_layout_cache():\n    update = json.loads(UPDATE_FILE.read_text(encoding=\"utf-8\"))\n    new_window = f'{update[\"window_start\"]} ~ {update[\"window_end\"]}'\n    fragments = [\n        update[\"customer\"],\n        update[\"owner_name\"],\n        new_window,\n        update[\"band\"],\n        update[\"escalation_email\"],\n        update[\"note\"],\n        *followup_items(),\n    ]\n    for section_name in (\"section0.xml\", \"section1.xml\"):\n        section_xml = load_section(OUTPUT_FILE, section_name)\n        for paragraph, text in paragraph_texts(section_xml):\n            if any(fragment in text for fragment in fragments):\n                assert paragraph.find(\"hp:linesegarray\", NS) is None\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 7,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3 \\\n    python3-pip \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3-pytest \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest-json-ctrf==0.3.5\n\nCOPY renewal_playbook.hwpx /root/renewal_playbook.hwpx\nCOPY renewal_update.json /root/renewal_update.json\nCOPY followups.csv /root/followups.csv\n\nWORKDIR /root\n",
+        "followups.csv": "sequence,item\n1,보안 검토 완료 일정을 고객과 다시 확인\n2,결재 라인에 최신 가격 밴드를 반영\n3,갱신 주간에 에스컬레이션 연락처를 온콜로 고정\n",
+        "renewal_update.json": "{\n  \"customer\": \"Asteron Commerce\",\n  \"owner_name\": \"한예진\",\n  \"window_start\": \"2026-08-12\",\n  \"window_end\": \"2026-08-26\",\n  \"band\": \"Priority-24M\",\n  \"escalation_email\": \"renewals-escalation@asteron.example\",\n  \"note\": \"가격 검토가 끝날 때까지 할인 문구를 외부에 공유하지 마세요.\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "renewal_playbook.hwpx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\HWPX-Document-Automation\\hwpx-renewal-playbook-update\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "document-editing",
+            "tags": [
+              "hwpx",
+              "xml-editing",
+              "document-processing",
+              "latent-method-reuse"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-bbb13c6d2016716b"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "hwpx-inventory-report",
+      "category": "HWPX-Document-Automation",
+      "family_id": "HWPX-Document-Automation",
+      "description": "Complete the inventory status report `inventory_report_template.hwpx` using the values in `inventory_data.json`, then save the result to `/root/inventory_report_ready.hwpx`.\n\nRequirements:\n- Replace every `{{...}}` placeholder with the matching value from the JSON file.\n- Keep all Korean labels and the static note line unchanged.\n- Preserve empty paragraphs (spacing) in the document structure.\n- No `{{...}}` placeholder text may remain anywhere in the output.\n- The result must remain a valid `.hwpx` package.\n- Any paragraph whose text you modify must not retain stale layout-cache elements, so the edited document can open cleanly without overlapping characters.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nimport os\nimport re\nimport zipfile\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n\nTASK_ROOT = Path(os.environ.get(\"HWPX_TASK_ROOT\", \"/root\"))\nOUTPUT_FILE = TASK_ROOT / \"inventory_report_ready.hwpx\"\nDATA_FILE = TASK_ROOT / \"inventory_data.json\"\nNS = {\"hp\": \"http://www.hancom.co.kr/hwpml/2010/HWPML\"}\n\ndef load_section(hwpx_path: Path, section_name: str) -> str:\n    with zipfile.ZipFile(hwpx_path) as zf:\n        return zf.read(f\"Contents/{section_name}\").decode(\"utf-8\")\n\ndef paragraph_texts(section_xml: str):\n    root = ET.fromstring(section_xml)\n    for paragraph in root.findall(\".//hp:p\", NS):\n        yield paragraph, \"\".join((node.text or \"\") for node in paragraph.findall(\".//hp:t\", NS))\n\ndef test_output_exists_and_is_zip():\n    assert OUTPUT_FILE.exists()\n    assert zipfile.is_zipfile(OUTPUT_FILE)\n\ndef test_required_values_present_and_placeholders_removed():\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    section_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    for value in data.values():\n        assert value in section_xml\n    assert \"비고: 월간 정기 보고\" in section_xml\n    assert not re.search(r\"\\{\\{[^}]+\\}\\}\", section_xml)\n\ndef test_modified_paragraphs_do_not_keep_layout_cache():\n    data = json.loads(DATA_FILE.read_text(encoding=\"utf-8\"))\n    fragments = list(data.values())\n    section_xml = load_section(OUTPUT_FILE, \"section0.xml\")\n    for paragraph, text in paragraph_texts(section_xml):\n        if any(fragment in text for fragment in fragments):\n            assert paragraph.find(\"hp:linesegarray\", NS) is None\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 8,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3 \\\n    python3-pip \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    python3-pytest \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages \\\n    pytest-json-ctrf==0.3.5\n\nCOPY inventory_report_template.hwpx /root/inventory_report_template.hwpx\nCOPY inventory_data.json /root/inventory_data.json\n\nWORKDIR /root\n",
+        "inventory_data.json": "{\n  \"보고일\": \"2026-11-20\",\n  \"작성자\": \"정도현\",\n  \"부서\": \"물류관리팀\",\n  \"창고명\": \"부산 북부 물류센터\",\n  \"창고위치\": \"부산광역시 북구 낙동대로 250\",\n  \"총품목수\": \"1,247개\",\n  \"총재고금액\": \"₩3,850,000,000\",\n  \"품목1\": \"전자부품 (재고량: 45,000개, 금액: ₩1,200,000,000)\",\n  \"품목2\": \"포장자재 (재고량: 120,000개, 금액: ₩850,000,000)\",\n  \"품목3\": \"완제품 (재고량: 8,500개, 금액: ₩1,800,000,000)\",\n  \"특이사항\": \"전자부품 중 일부 품목의 유통기한이 임박하여 우선 출고 필요\",\n  \"차기계획\": \"2026년 12월 중 전자부품 재고 조정 및 연말 실시 예정\"\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "inventory_report_template.hwpx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\HWPX-Document-Automation\\hwpx-inventory-report\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw Task Engineer",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "document-editing",
+            "tags": [
+              "hwpx",
+              "xml-editing",
+              "document-processing",
+              "latent-method-reuse"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-3c986aa4aa5920aa"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    }
+  ]
+}

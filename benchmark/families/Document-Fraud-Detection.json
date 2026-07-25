@@ -1,0 +1,509 @@
+{
+  "family_id": "Document-Fraud-Detection",
+  "description": "真实 SkillFlow family: Document-Fraud-Detection（8 个递增难度任务）",
+  "skill_name": "Document-Fraud-Detection",
+  "tasks": [
+    {
+      "task_id": "travel-expense-screening",
+      "category": "Document-Fraud-Detection",
+      "family_id": "Document-Fraud-Detection",
+      "description": "You are helping a finance operations team review travel reimbursement claims.\n\nAnalyze these files:\n- `/root/expense_claims.pdf`: one travel claim per page\n- `/root/employee_directory.xlsx`: approved employees with `employee_id`, `employee_name`, `department_code`, and `bank_account`\n- `/root/trip_approvals.csv`: approved trips with `trip_id`, `approved_amount`, and `employee_id`\n\nA claim is suspicious if it meets ANY of the following criteria:\n- Unknown Employee: the employee name does not match any employee in `employee_directory.xlsx`. Minor typos or small formatting variations can appear in the PDF names.\n- Account Mismatch: the employee exists, but the bank account on the PDF does not match the employee's bank account.\n- Invalid Trip ID: the trip ID is missing from the approvals file.\n- Amount Mismatch: the trip exists, but the claimed amount differs from the approved amount by more than `0.01`.\n- Traveler Mismatch: the trip exists, but it belongs to a different `employee_id` than the matched employee.\n\nWrite only the flagged claims to `/root/expense_alerts.json`.\n\nRequirements:\n- Use 1-based page indexing.\n- Sort the JSON array by `claim_page_number` ascending.\n- Copy `employee_name` and `bank_account` exactly as they appear on the PDF.\n- If a page has no `Trip ID` line, set `trip_id` to `null`. Otherwise copy the Trip ID string exactly as shown, even if it later proves invalid.\n- `reason` must be one of: `Unknown Employee`, `Account Mismatch`, `Invalid Trip ID`, `Amount Mismatch`, `Traveler Mismatch`.\n- If multiple reasons apply, use the first reason in the order listed above.\n\nRequired JSON structure:\n```json\n[\n  {\n    \"claim_page_number\": 2,\n    \"employee_name\": \"Brian Ortega\",\n    \"claimed_amount\": 980.0,\n    \"bank_account\": \"WRONG-222\",\n    \"trip_id\": \"TRIP-4102\",\n    \"reason\": \"Account Mismatch\"\n  }\n]\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nfrom pathlib import Path\n\nOUTPUT_PATH = Path('/root/expense_alerts.json')\nGROUND_TRUTH_PATH = Path(__file__).with_name('ground_truth.json')\nPAGE_KEY = 'claim_page_number'\nREQUIRED_KEYS = ['claim_page_number', 'employee_name', 'claimed_amount', 'bank_account', 'trip_id', 'reason']\n\n\ndef load_json(path: Path):\n    return json.loads(path.read_text(encoding='utf-8'))\n\n\ndef json_close(actual, expected, tol=0.01):\n    \"\"\"Compare two JSON structures with numeric tolerance.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch: {set(actual.keys())} vs {set(expected.keys())}\"\n        for k in expected:\n            ok, msg = json_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At key '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = json_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric mismatch: {actual} vs {expected} (tol={tol})\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"String mismatch: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value mismatch: {actual} vs {expected}\"\n        return True, \"\"\n\n\ndef test_output_exists():\n    assert OUTPUT_PATH.exists(), f'Missing required output: {OUTPUT_PATH}'\n\n\ndef test_output_matches_ground_truth():\n    actual = load_json(OUTPUT_PATH)\n    expected = load_json(GROUND_TRUTH_PATH)\n\n    assert isinstance(actual, list), 'Output must be a JSON array.'\n    assert [row[PAGE_KEY] for row in actual] == sorted(row[PAGE_KEY] for row in actual), 'Rows must be sorted by page number ascending.'\n    for row in actual:\n        assert set(row.keys()) == set(REQUIRED_KEYS), f'Unexpected keys in row: {row}'\n    ok, msg = json_close(actual, expected)\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 1,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3     python3-pip     build-essential     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     pdfplumber==0.11.9     openpyxl==3.1.5     pandas==2.3.3     rapidfuzz==3.14.3\n\nWORKDIR /root\n\nCOPY expense_claims.pdf /root/expense_claims.pdf\nCOPY employee_directory.xlsx /root/employee_directory.xlsx\nCOPY trip_approvals.csv /root/trip_approvals.csv\n",
+        "trip_approvals.csv": "trip_id,approved_amount,employee_id\nTRIP-4101,1280.5,E100\nTRIP-4102,980.0,E101\nTRIP-4103,1520.75,E102\nTRIP-4104,645.2,E103\nTRIP-4105,2200.0,E104\nTRIP-4106,875.4,E100\nTRIP-4107,1333.33,E103\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "employee_directory.xlsx",
+          "expense_claims.pdf"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Document-Fraud-Detection\\travel-expense-screening\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "GPT-5.4",
+            "author_email": "gpt54@example.com",
+            "difficulty": "hard",
+            "category": "data-validation",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "csv",
+              "json",
+              "fuzzy-matching",
+              "travel-audit"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-25731b6dbb50db06"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "speaker-honorarium-review",
+      "category": "Document-Fraud-Detection",
+      "family_id": "Document-Fraud-Detection",
+      "description": "You are reviewing speaker honorarium requests for an events team.\n\nAnalyze these files:\n- `/root/honorarium_requests.pdf`: one request per page\n- `/root/speaker_registry.xlsx`: approved speakers with `speaker_id`, `speaker_name`, `organization_code`, and `payment_account`\n- `/root/session_approvals.csv`: approved sessions with `approval_code`, `approved_fee`, and `speaker_id`\n\nA request is suspicious if it meets ANY of the following criteria:\n- Unknown Speaker: the speaker name does not match any approved speaker. Minor typos or small formatting variations can appear in the PDF names.\n- Account Mismatch: the speaker exists, but the payment account on the PDF does not match the registry.\n- Invalid Approval Code: the approval code is missing from the approvals file.\n- Fee Mismatch: the approval exists, but the requested fee differs from the approved fee by more than `0.01`.\n- Speaker Mismatch: the approval exists, but it belongs to a different `speaker_id` than the matched speaker.\n\nWrite only the flagged requests to `/root/honorarium_flags.json`.\n\nRequirements:\n- Use 1-based page indexing.\n- Sort the JSON array by `request_page_number` ascending.\n- Copy `speaker_name` and `payment_account` exactly as they appear on the PDF.\n- If a page has no `Approval Code` line, set `approval_code` to `null`. Otherwise copy the approval code exactly as shown, even if it later proves invalid.\n- `reason` must be one of: `Unknown Speaker`, `Account Mismatch`, `Invalid Approval Code`, `Fee Mismatch`, `Speaker Mismatch`.\n- If multiple reasons apply, use the first reason in the order listed above.\n\nRequired JSON structure:\n```json\n[\n  {\n    \"request_page_number\": 6,\n    \"speaker_name\": \"Marisa Cole\",\n    \"requested_fee\": 900.0,\n    \"payment_account\": \"PAY-88\",\n    \"approval_code\": \"AP-7004\",\n    \"reason\": \"Unknown Speaker\"\n  }\n]\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nfrom pathlib import Path\n\nOUTPUT_PATH = Path('/root/honorarium_flags.json')\nGROUND_TRUTH_PATH = Path(__file__).with_name('ground_truth.json')\nPAGE_KEY = 'request_page_number'\nREQUIRED_KEYS = ['request_page_number', 'speaker_name', 'requested_fee', 'payment_account', 'approval_code', 'reason']\n\n\ndef load_json(path: Path):\n    return json.loads(path.read_text(encoding='utf-8'))\n\n\ndef json_close(actual, expected, tol=0.01):\n    \"\"\"Compare two JSON structures with numeric tolerance.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch: {set(actual.keys())} vs {set(expected.keys())}\"\n        for k in expected:\n            ok, msg = json_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At key '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = json_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric mismatch: {actual} vs {expected} (tol={tol})\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"String mismatch: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value mismatch: {actual} vs {expected}\"\n        return True, \"\"\n\n\ndef test_output_exists():\n    assert OUTPUT_PATH.exists(), f'Missing required output: {OUTPUT_PATH}'\n\n\ndef test_output_matches_ground_truth():\n    actual = load_json(OUTPUT_PATH)\n    expected = load_json(GROUND_TRUTH_PATH)\n\n    assert isinstance(actual, list), 'Output must be a JSON array.'\n    assert [row[PAGE_KEY] for row in actual] == sorted(row[PAGE_KEY] for row in actual), 'Rows must be sorted by page number ascending.'\n    for row in actual:\n        assert set(row.keys()) == set(REQUIRED_KEYS), f'Unexpected keys in row: {row}'\n    ok, msg = json_close(actual, expected)\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 2,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3     python3-pip     build-essential     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     pdfplumber==0.11.9     openpyxl==3.1.5     pandas==2.3.3     rapidfuzz==3.14.3\n\nWORKDIR /root\n\nCOPY honorarium_requests.pdf /root/honorarium_requests.pdf\nCOPY speaker_registry.xlsx /root/speaker_registry.xlsx\nCOPY session_approvals.csv /root/session_approvals.csv\n",
+        "session_approvals.csv": "approval_code,approved_fee,speaker_id\nAP-7001,1500.0,SPK-21\nAP-7002,2200.0,SPK-22\nAP-7003,1750.5,SPK-23\nAP-7004,900.0,SPK-24\nAP-7005,1100.0,SPK-25\nAP-7006,1300.0,SPK-21\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "honorarium_requests.pdf",
+          "speaker_registry.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Document-Fraud-Detection\\speaker-honorarium-review\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "GPT-5.4",
+            "author_email": "gpt54@example.com",
+            "difficulty": "hard",
+            "category": "data-validation",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "csv",
+              "json",
+              "fuzzy-matching",
+              "speaker-payments"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-da706595c435cd89"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "clinic-shift-claim-review",
+      "category": "Document-Fraud-Detection",
+      "family_id": "Document-Fraud-Detection",
+      "description": "You are reviewing overnight clinic shift payment claims.\n\nAnalyze these files:\n- `/root/shift_claims.pdf`: one claim per page\n- `/root/clinician_directory.xlsx`: approved clinicians with `clinician_id`, `clinician_name`, `unit_code`, and `payout_account`\n- `/root/shift_authorizations.csv`: valid shift authorizations with `shift_code_internal`, `approved_pay`, and `clinician_id`\n- `/root/shift_crosswalk.csv`: mapping from PDF `shift_ref` values to `shift_code_internal`\n\nA claim is suspicious if it meets ANY of the following criteria:\n- Unknown Clinician: the clinician name does not match any clinician in the workbook. Minor typos or small formatting variations can appear in the PDF names.\n- Account Mismatch: the clinician exists, but the payout account on the PDF does not match the clinician record.\n- Invalid Shift Code: the PDF `shift_ref` is missing from `shift_crosswalk.csv`, or its mapped `shift_code_internal` is missing from `shift_authorizations.csv`.\n- Amount Mismatch: the shift exists, but the requested pay differs from the approved pay by more than `0.01`.\n- Clinician Mismatch: the shift exists, but it belongs to a different `clinician_id` than the matched clinician.\n\nWrite only the flagged claims to `/root/shift_claim_flags.json`.\n\nRequirements:\n- Use 1-based page indexing.\n- Sort the JSON array by `claim_page_number` ascending.\n- Copy `clinician_name` and `payout_account` exactly as they appear on the PDF.\n- If a page has no `Shift Ref` line, set `shift_ref` to `null`. Otherwise copy the shift reference exactly as shown, even if it later proves invalid.\n- `reason` must be one of: `Unknown Clinician`, `Account Mismatch`, `Invalid Shift Code`, `Amount Mismatch`, `Clinician Mismatch`.\n- If multiple reasons apply, use the first reason in the order listed above.\n\nRequired JSON structure:\n```json\n[\n  {\n    \"claim_page_number\": 4,\n    \"clinician_name\": \"Victor Han\",\n    \"requested_pay\": 520.0,\n    \"payout_account\": \"BAD-702\",\n    \"shift_ref\": \"SHIFT-B2\",\n    \"reason\": \"Account Mismatch\"\n  }\n]\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nfrom pathlib import Path\n\nOUTPUT_PATH = Path('/root/shift_claim_flags.json')\nGROUND_TRUTH_PATH = Path(__file__).with_name('ground_truth.json')\nPAGE_KEY = 'claim_page_number'\nREQUIRED_KEYS = ['claim_page_number', 'clinician_name', 'requested_pay', 'payout_account', 'shift_ref', 'reason']\n\n\ndef load_json(path: Path):\n    return json.loads(path.read_text(encoding='utf-8'))\n\n\ndef json_close(actual, expected, tol=0.01):\n    \"\"\"Compare two JSON structures with numeric tolerance.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch: {set(actual.keys())} vs {set(expected.keys())}\"\n        for k in expected:\n            ok, msg = json_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At key '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = json_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric mismatch: {actual} vs {expected} (tol={tol})\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"String mismatch: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value mismatch: {actual} vs {expected}\"\n        return True, \"\"\n\n\ndef test_output_exists():\n    assert OUTPUT_PATH.exists(), f'Missing required output: {OUTPUT_PATH}'\n\n\ndef test_output_matches_ground_truth():\n    actual = load_json(OUTPUT_PATH)\n    expected = load_json(GROUND_TRUTH_PATH)\n\n    assert isinstance(actual, list), 'Output must be a JSON array.'\n    assert [row[PAGE_KEY] for row in actual] == sorted(row[PAGE_KEY] for row in actual), 'Rows must be sorted by page number ascending.'\n    for row in actual:\n        assert set(row.keys()) == set(REQUIRED_KEYS), f'Unexpected keys in row: {row}'\n    ok, msg = json_close(actual, expected)\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 3,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3     python3-pip     build-essential     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     pdfplumber==0.11.9     openpyxl==3.1.5     pandas==2.3.3     rapidfuzz==3.14.3\n\nWORKDIR /root\n\nCOPY shift_claims.pdf /root/shift_claims.pdf\nCOPY clinician_directory.xlsx /root/clinician_directory.xlsx\nCOPY shift_authorizations.csv /root/shift_authorizations.csv\nCOPY shift_crosswalk.csv /root/shift_crosswalk.csv\n",
+        "shift_authorizations.csv": "shift_code_internal,approved_pay,clinician_id\nINT-5101,450.0,C701\nINT-5102,520.0,C702\nINT-5103,640.0,C703\nINT-5104,390.0,C704\nINT-5105,700.0,C705\n",
+        "shift_crosswalk.csv": "shift_ref,shift_code_internal\nSHIFT-A1,INT-5101\nSHIFT-B2,INT-5102\nSHIFT-C3,INT-5103\nSHIFT-D4,INT-5104\nSHIFT-E5,INT-5105\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "clinician_directory.xlsx",
+          "shift_claims.pdf"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Document-Fraud-Detection\\clinic-shift-claim-review\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "GPT-5.4",
+            "author_email": "gpt54@example.com",
+            "difficulty": "hard",
+            "category": "data-validation",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "csv",
+              "json",
+              "fuzzy-matching",
+              "hospital-ops"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-e654c1f9878a661e"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "field-service-workorder-audit",
+      "category": "Document-Fraud-Detection",
+      "family_id": "Document-Fraud-Detection",
+      "description": "You are auditing field service billing packets before payment.\n\nAnalyze these files:\n- `/root/service_packets.pdf`: one billing packet per page\n- `/root/contractor_directory.xlsx`: contractor records plus known name variants\n- `/root/work_orders.csv`: base work orders\n- `/root/work_order_revisions.csv`: optional work order revisions\n\nUse these rules:\n- Match contractor names against the contractor workbook, including known name variants. Minor typos or small formatting variations can appear in the PDF names.\n- In `work_orders.csv`, only rows with `status = active` are valid base work orders.\n- If `work_order_revisions.csv` contains one or more rows for the same `work_order_id` with `approval_state = approved`, keep the row with the highest `revision` and use its `revised_amount` as the expected amount.\n\nA packet is suspicious if it meets ANY of the following criteria:\n- Unknown Contractor: the contractor name does not resolve to any contractor in the workbook.\n- Account Mismatch: the contractor exists, but the payment account on the PDF does not match the contractor record.\n- Invalid Work Order: the work order is missing from the valid base orders.\n- Amount Mismatch: the work order exists, but the billed amount differs from the expected amount by more than `0.01` after applying the revision rule above.\n- Contractor Mismatch: the work order exists, but it belongs to a different `contractor_id` than the matched contractor.\n\nWrite only the flagged packets to `/root/service_audit_flags.json`.\n\nRequirements:\n- Use 1-based page indexing.\n- Sort the JSON array by `packet_page_number` ascending.\n- Copy `contractor_name` and `payment_account` exactly as they appear on the PDF.\n- If a page has no `Work Order` line, set `work_order_id` to `null`. Otherwise copy the work order ID exactly as shown, even if it later proves invalid.\n- `reason` must be one of: `Unknown Contractor`, `Account Mismatch`, `Invalid Work Order`, `Amount Mismatch`, `Contractor Mismatch`.\n- If multiple reasons apply, use the first reason in the order listed above.\n\nRequired JSON structure:\n```json\n[\n  {\n    \"packet_page_number\": 4,\n    \"contractor_name\": \"Harbor Electric LLC\",\n    \"billed_amount\": 2750.0,\n    \"payment_account\": \"ACC-HE-4\",\n    \"work_order_id\": \"WO-8806\",\n    \"reason\": \"Invalid Work Order\"\n  }\n]\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nfrom pathlib import Path\n\nOUTPUT_PATH = Path('/root/service_audit_flags.json')\nGROUND_TRUTH_PATH = Path(__file__).with_name('ground_truth.json')\nPAGE_KEY = 'packet_page_number'\nREQUIRED_KEYS = ['packet_page_number', 'contractor_name', 'billed_amount', 'payment_account', 'work_order_id', 'reason']\n\n\ndef load_json(path: Path):\n    return json.loads(path.read_text(encoding='utf-8'))\n\n\ndef json_close(actual, expected, tol=0.01):\n    \"\"\"Compare two JSON structures with numeric tolerance.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch: {set(actual.keys())} vs {set(expected.keys())}\"\n        for k in expected:\n            ok, msg = json_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At key '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = json_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric mismatch: {actual} vs {expected} (tol={tol})\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"String mismatch: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value mismatch: {actual} vs {expected}\"\n        return True, \"\"\n\n\ndef test_output_exists():\n    assert OUTPUT_PATH.exists(), f'Missing required output: {OUTPUT_PATH}'\n\n\ndef test_output_matches_ground_truth():\n    actual = load_json(OUTPUT_PATH)\n    expected = load_json(GROUND_TRUTH_PATH)\n\n    assert isinstance(actual, list), 'Output must be a JSON array.'\n    assert [row[PAGE_KEY] for row in actual] == sorted(row[PAGE_KEY] for row in actual), 'Rows must be sorted by page number ascending.'\n    for row in actual:\n        assert set(row.keys()) == set(REQUIRED_KEYS), f'Unexpected keys in row: {row}'\n    ok, msg = json_close(actual, expected)\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 4,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3     python3-pip     build-essential     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     pdfplumber==0.11.9     openpyxl==3.1.5     pandas==2.3.3     rapidfuzz==3.14.3\n\nWORKDIR /root\n\nCOPY service_packets.pdf /root/service_packets.pdf\nCOPY contractor_directory.xlsx /root/contractor_directory.xlsx\nCOPY work_orders.csv /root/work_orders.csv\nCOPY work_order_revisions.csv /root/work_order_revisions.csv\n",
+        "work_order_revisions.csv": "work_order_id,revision,revised_amount,site_zone,approval_state\nWO-8802,1,3725.5,Z-CENTRAL,approved\nWO-8804,1,4950.0,Z-WEST,draft\nWO-8807,1,6400.0,Z-WEST,approved\nWO-8807,2,6550.0,Z-WEST,approved\n",
+        "work_orders.csv": "work_order_id,contractor_id,approved_amount,site_zone,status\nWO-8801,C301,4800.0,Z-NORTH,active\nWO-8802,C302,3650.5,Z-CENTRAL,active\nWO-8803,C303,2900.0,Z-EAST,active\nWO-8804,C304,5100.0,Z-WEST,active\nWO-8805,C305,4300.0,Z-SOUTH,active\nWO-8806,C301,2750.0,Z-NORTH,closed\nWO-8807,C304,6200.0,Z-WEST,active\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "contractor_directory.xlsx",
+          "service_packets.pdf"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Document-Fraud-Detection\\field-service-workorder-audit\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "GPT-5.4",
+            "author_email": "gpt54@example.com",
+            "difficulty": "hard",
+            "category": "data-validation",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "csv",
+              "json",
+              "fuzzy-matching",
+              "work-orders"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-5888599fd4f8fbcc"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "fleet-maintenance-chargeback-audit",
+      "category": "Document-Fraud-Detection",
+      "family_id": "Document-Fraud-Detection",
+      "description": "You are auditing fleet maintenance chargeback packets before payment.\n\nAnalyze these files:\n- `/root/chargeback_packets.pdf`: one chargeback packet per page\n- `/root/provider_directory.xlsx`: `providers` sheet with approved providers and `aliases` sheet with known name variants\n- `/root/maintenance_orders.json`: maintenance orders grouped by depot\n- `/root/maintenance_adjustments.csv`: optional charge amendments\n\nUse these rules:\n- Match provider names against the workbook, including known aliases. Minor typos or small formatting variations can appear in the PDF names.\n- Flatten all orders under all depots in `maintenance_orders.json`.\n- Use only order entries where `lifecycle` is `approved`.\n- If `maintenance_adjustments.csv` contains one or more rows for the same `order_id` with `decision = approved`, keep the row with the highest `amendment_no` and use its `amended_charge` as the expected amount.\n\nA packet is suspicious if it meets ANY of the following criteria:\n- Unknown Provider: the provider name does not resolve to any provider in the workbook.\n- Account Mismatch: the provider exists, but the payment account on the PDF does not match the provider record.\n- Invalid Order ID: the order ID is missing from the valid flattened order set.\n- Amount Mismatch: the order exists, but the chargeback total differs from the expected amount by more than `0.01` after applying the amendment rule above.\n- Provider Mismatch: the order exists, but it belongs to a different `provider_id` than the matched provider.\n\nWrite only the flagged packets to `/root/fleet_chargeback_flags.json`.\n\nRequirements:\n- Use 1-based page indexing.\n- Sort the JSON array by `packet_page_number` ascending.\n- Copy `provider_name` and `payment_account` exactly as they appear on the PDF.\n- If a page has no `Order ID` line, set `order_id` to `null`. Otherwise copy the order ID exactly as shown, even if it later proves invalid.\n- `reason` must be one of: `Unknown Provider`, `Account Mismatch`, `Invalid Order ID`, `Amount Mismatch`, `Provider Mismatch`.\n- If multiple reasons apply, use the first reason in the order listed above.\n\nRequired JSON structure:\n```json\n[\n  {\n    \"packet_page_number\": 5,\n    \"provider_name\": \"Beacon Tire Co\",\n    \"chargeback_total\": 980.0,\n    \"payment_account\": \"ACC-804\",\n    \"order_id\": \"MO-9999\",\n    \"reason\": \"Invalid Order ID\"\n  }\n]\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nfrom pathlib import Path\n\nOUTPUT_PATH = Path('/root/fleet_chargeback_flags.json')\nGROUND_TRUTH_PATH = Path(__file__).with_name('ground_truth.json')\nPAGE_KEY = 'packet_page_number'\nREQUIRED_KEYS = ['packet_page_number', 'provider_name', 'chargeback_total', 'payment_account', 'order_id', 'reason']\n\n\ndef load_json(path: Path):\n    return json.loads(path.read_text(encoding='utf-8'))\n\n\ndef json_close(actual, expected, tol=0.01):\n    \"\"\"Compare two JSON structures with numeric tolerance.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch: {set(actual.keys())} vs {set(expected.keys())}\"\n        for k in expected:\n            ok, msg = json_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At key '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = json_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric mismatch: {actual} vs {expected} (tol={tol})\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"String mismatch: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value mismatch: {actual} vs {expected}\"\n        return True, \"\"\n\n\ndef test_output_exists():\n    assert OUTPUT_PATH.exists(), f'Missing required output: {OUTPUT_PATH}'\n\n\ndef test_output_matches_ground_truth():\n    actual = load_json(OUTPUT_PATH)\n    expected = load_json(GROUND_TRUTH_PATH)\n\n    assert isinstance(actual, list), 'Output must be a JSON array.'\n    assert [row[PAGE_KEY] for row in actual] == sorted(row[PAGE_KEY] for row in actual), 'Rows must be sorted by page number ascending.'\n    for row in actual:\n        assert set(row.keys()) == set(REQUIRED_KEYS), f'Unexpected keys in row: {row}'\n    ok, msg = json_close(actual, expected)\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 5,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3     python3-pip     build-essential     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     pdfplumber==0.11.9     openpyxl==3.1.5     pandas==2.3.3     rapidfuzz==3.14.3\n\nWORKDIR /root\n\nCOPY chargeback_packets.pdf /root/chargeback_packets.pdf\nCOPY provider_directory.xlsx /root/provider_directory.xlsx\nCOPY maintenance_orders.json /root/maintenance_orders.json\nCOPY maintenance_adjustments.csv /root/maintenance_adjustments.csv\n",
+        "maintenance_adjustments.csv": "order_id,amendment_no,amended_charge,decision\nMO-9003,1,1175.0,approved\nMO-9004,1,990.0,rejected\n",
+        "maintenance_orders.json": "{\n  \"depots\": [\n    {\n      \"depot_code\": \"D-NORTH\",\n      \"orders\": [\n        {\n          \"order_id\": \"MO-9001\",\n          \"provider_id\": \"P801\",\n          \"approved_charge\": 1800.0,\n          \"lifecycle\": \"approved\"\n        },\n        {\n          \"order_id\": \"MO-9002\",\n          \"provider_id\": \"P802\",\n          \"approved_charge\": 2400.0,\n          \"lifecycle\": \"approved\"\n        }\n      ]\n    },\n    {\n      \"depot_code\": \"D-CENTRAL\",\n      \"orders\": [\n        {\n          \"order_id\": \"MO-9003\",\n          \"provider_id\": \"P803\",\n          \"approved_charge\": 1150.0,\n          \"lifecycle\": \"approved\"\n        },\n        {\n          \"order_id\": \"MO-9004\",\n          \"provider_id\": \"P804\",\n          \"approved_charge\": 980.0,\n          \"lifecycle\": \"approved\"\n        }\n      ]\n    },\n    {\n      \"depot_code\": \"D-WEST\",\n      \"orders\": [\n        {\n          \"order_id\": \"MO-9005\",\n          \"provider_id\": \"P805\",\n          \"approved_charge\": 2050.0,\n          \"lifecycle\": \"approved\"\n        },\n        {\n          \"order_id\": \"MO-9006\",\n          \"provider_id\": \"P801\",\n          \"approved_charge\": 760.0,\n          \"lifecycle\": \"closed\"\n        }\n      ]\n    }\n  ]\n}\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "chargeback_packets.pdf",
+          "provider_directory.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Document-Fraud-Detection\\fleet-maintenance-chargeback-audit\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "GPT-5.4",
+            "author_email": "gpt54@example.com",
+            "difficulty": "hard",
+            "category": "data-validation",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "csv",
+              "json",
+              "fuzzy-matching",
+              "fleet-ops"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-56febc17414d475b"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "research-stipend-reconciliation",
+      "category": "Document-Fraud-Detection",
+      "family_id": "Document-Fraud-Detection",
+      "description": "You are reconciling research stipend disbursement packets.\n\nAnalyze these files:\n- `/root/stipend_packets.pdf`: a packet PDF that may include cover or appendix pages\n- `/root/recipient_roster.xlsx`: recipient records plus known name variants\n- `/root/award_authorizations.csv`: base award authorizations\n- `/root/award_adjustments.csv`: optional award adjustments\n\nUse these rules:\n- Only pages whose first line is exactly `Stipend Disbursement Request` are in scope. Ignore all other pages completely.\n- Match recipient names against the roster workbook, including known name variants. Minor typos or small formatting variations can appear in the PDF names.\n- In `award_authorizations.csv`, only rows with `state = active` are valid base awards.\n- If `award_adjustments.csv` contains one or more rows for the same `award_ref` with `state = approved`, keep the row with the highest `revision_no` and use its `adjusted_value` and `campus_code`.\n\nA request is suspicious if it meets ANY of the following criteria:\n- Unknown Recipient: the recipient name does not resolve to any recipient in the workbook.\n- Account Mismatch: the recipient exists, but the bank token on the PDF does not match the roster.\n- Invalid Award Ref: the award reference is missing from the valid base authorizations.\n- Amount Mismatch: the award exists, but the requested amount differs from the expected amount by more than `0.01` after applying the adjustment rule above.\n- Campus Mismatch: the award exists, but the campus on the PDF does not match the expected campus after applying the adjustment rule above.\n\nWrite only the flagged in-scope requests to `/root/stipend_review.json`.\n\nRequirements:\n- Use the original 1-based PDF page numbers.\n- Sort the JSON array by `request_page_number` ascending.\n- Copy `recipient_name` and `bank_token` exactly as they appear on the PDF.\n- If an in-scope page has no `Award Ref` line, set `award_ref` to `null`. Otherwise copy the award reference exactly as shown, even if it later proves invalid.\n- `reason` must be one of: `Unknown Recipient`, `Account Mismatch`, `Invalid Award Ref`, `Amount Mismatch`, `Campus Mismatch`.\n- If multiple reasons apply, use the first reason in the order listed above.\n\nRequired JSON structure:\n```json\n[\n  {\n    \"request_page_number\": 7,\n    \"recipient_name\": \"Leah Brooks\",\n    \"requested_amount\": 2100.0,\n    \"bank_token\": \"BANK-505\",\n    \"award_ref\": \"AWD-3005\",\n    \"reason\": \"Invalid Award Ref\"\n  }\n]\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nfrom pathlib import Path\n\nOUTPUT_PATH = Path('/root/stipend_review.json')\nGROUND_TRUTH_PATH = Path(__file__).with_name('ground_truth.json')\nPAGE_KEY = 'request_page_number'\nREQUIRED_KEYS = ['request_page_number', 'recipient_name', 'requested_amount', 'bank_token', 'award_ref', 'reason']\n\n\ndef load_json(path: Path):\n    return json.loads(path.read_text(encoding='utf-8'))\n\n\ndef json_close(actual, expected, tol=0.01):\n    \"\"\"Compare two JSON structures with numeric tolerance.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch: {set(actual.keys())} vs {set(expected.keys())}\"\n        for k in expected:\n            ok, msg = json_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At key '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = json_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric mismatch: {actual} vs {expected} (tol={tol})\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"String mismatch: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value mismatch: {actual} vs {expected}\"\n        return True, \"\"\n\n\ndef test_output_exists():\n    assert OUTPUT_PATH.exists(), f'Missing required output: {OUTPUT_PATH}'\n\n\ndef test_output_matches_ground_truth():\n    actual = load_json(OUTPUT_PATH)\n    expected = load_json(GROUND_TRUTH_PATH)\n\n    assert isinstance(actual, list), 'Output must be a JSON array.'\n    assert [row[PAGE_KEY] for row in actual] == sorted(row[PAGE_KEY] for row in actual), 'Rows must be sorted by page number ascending.'\n    for row in actual:\n        assert set(row.keys()) == set(REQUIRED_KEYS), f'Unexpected keys in row: {row}'\n    ok, msg = json_close(actual, expected)\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 6,
+      "dependencies": [],
+      "files": {
+        "award_adjustments.csv": "award_ref,revision_no,adjusted_value,campus_code,state\nAWD-3002,1,2500.0,CAMP-S,approved\nAWD-3002,2,2550.0,CAMP-S,approved\nAWD-3003,1,1900.75,CAMP-E,rejected\nAWD-3004,1,1600.0,CAMP-C,approved\n",
+        "award_authorizations.csv": "award_ref,recipient_code,approved_value,campus_code,state\nAWD-3001,R501,1800.0,CAMP-N,active\nAWD-3002,R502,2400.0,CAMP-S,active\nAWD-3003,R503,1950.75,CAMP-E,active\nAWD-3004,R504,1600.0,CAMP-W,active\nAWD-3005,R505,2100.0,CAMP-N,archived\nAWD-3006,R501,900.0,CAMP-N,active\n",
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3     python3-pip     build-essential     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     pdfplumber==0.11.9     openpyxl==3.1.5     pandas==2.3.3     rapidfuzz==3.14.3\n\nWORKDIR /root\n\nCOPY stipend_packets.pdf /root/stipend_packets.pdf\nCOPY recipient_roster.xlsx /root/recipient_roster.xlsx\nCOPY award_authorizations.csv /root/award_authorizations.csv\nCOPY award_adjustments.csv /root/award_adjustments.csv\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "recipient_roster.xlsx",
+          "stipend_packets.pdf"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Document-Fraud-Detection\\research-stipend-reconciliation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "GPT-5.4",
+            "author_email": "gpt54@example.com",
+            "difficulty": "hard",
+            "category": "data-validation",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "csv",
+              "json",
+              "fuzzy-matching",
+              "grant-payments"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-5e5254d790122737"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "warehouse-coldchain-charge-review",
+      "category": "Document-Fraud-Detection",
+      "family_id": "Document-Fraud-Detection",
+      "description": "You are reviewing cold-chain charge requests from a warehouse receiving team.\n\nAnalyze these files:\n- `/root/coldchain_charge_packets.pdf`: request pages plus appendix pages\n- `/root/carrier_registry.xlsx`: `carriers` sheet with approved carriers and `aliases` sheet with known name variants\n- `/root/shipment_authorizations.csv`: base shipment authorizations\n- `/root/shipment_snapshots.csv`: optional later shipment snapshots\n\nUse these rules:\n- Only pages whose first non-empty line is exactly `Cold Chain Charge Request` are in scope. Ignore all other pages completely.\n- Match carrier names against the workbook, including known aliases. Minor typos or small formatting variations can appear in the PDF names.\n- In `shipment_authorizations.csv`, use only rows where `record_state` is `approved`.\n- In `shipment_snapshots.csv`, use only rows where `snapshot_state` is `approved` and both `expected_charge` and `carrier_id` are non-empty.\n- If multiple usable snapshot rows exist for the same `shipment_ref`, keep the row with the highest `snapshot_seq` and use both its `expected_charge` and `carrier_id`.\n\nA request is suspicious if it meets ANY of the following criteria:\n- Unknown Carrier: the carrier name does not resolve to any carrier in the workbook.\n- Account Mismatch: the carrier exists, but the remit account on the PDF does not match the carrier record.\n- Invalid Shipment Ref: the shipment reference is missing from the valid shipment set.\n- Amount Mismatch: the shipment exists, but the requested charge differs from the expected amount by more than `0.01` after applying the snapshot rule above.\n- Carrier Mismatch: the shipment exists, but it belongs to a different `carrier_id` than the matched carrier after applying the snapshot rule above.\n\nWrite only the flagged in-scope requests to `/root/coldchain_charge_flags.json`.\n\nRequirements:\n- Use the original 1-based PDF page numbers.\n- Sort the JSON array by `request_page_number` ascending.\n- Copy `carrier_name` and `remit_account` exactly as they appear on the PDF.\n- If an in-scope page has no `Shipment Ref` line, set `shipment_ref` to `null`. Otherwise copy the shipment reference exactly as shown, even if it later proves invalid.\n- `reason` must be one of: `Unknown Carrier`, `Account Mismatch`, `Invalid Shipment Ref`, `Amount Mismatch`, `Carrier Mismatch`.\n- If multiple reasons apply, use the first reason in the order listed above.\n\nRequired JSON structure:\n```json\n[\n  {\n    \"request_page_number\": 6,\n    \"carrier_name\": \"Glacier Freight\",\n    \"requested_charge\": 915.0,\n    \"remit_account\": \"BAD-902\",\n    \"shipment_ref\": \"SH-7102\",\n    \"reason\": \"Account Mismatch\"\n  }\n]\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nfrom pathlib import Path\n\nOUTPUT_PATH = Path('/root/coldchain_charge_flags.json')\nGROUND_TRUTH_PATH = Path(__file__).with_name('ground_truth.json')\nPAGE_KEY = 'request_page_number'\nREQUIRED_KEYS = ['request_page_number', 'carrier_name', 'requested_charge', 'remit_account', 'shipment_ref', 'reason']\n\n\ndef load_json(path: Path):\n    return json.loads(path.read_text(encoding='utf-8'))\n\n\ndef json_close(actual, expected, tol=0.01):\n    \"\"\"Compare two JSON structures with numeric tolerance.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch: {set(actual.keys())} vs {set(expected.keys())}\"\n        for k in expected:\n            ok, msg = json_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At key '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = json_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric mismatch: {actual} vs {expected} (tol={tol})\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"String mismatch: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value mismatch: {actual} vs {expected}\"\n        return True, \"\"\n\n\ndef test_output_exists():\n    assert OUTPUT_PATH.exists(), f'Missing required output: {OUTPUT_PATH}'\n\n\ndef test_output_matches_ground_truth():\n    actual = load_json(OUTPUT_PATH)\n    expected = load_json(GROUND_TRUTH_PATH)\n\n    assert isinstance(actual, list), 'Output must be a JSON array.'\n    assert [row[PAGE_KEY] for row in actual] == sorted(row[PAGE_KEY] for row in actual), 'Rows must be sorted by page number ascending.'\n    for row in actual:\n        assert set(row.keys()) == set(REQUIRED_KEYS), f'Unexpected keys in row: {row}'\n    ok, msg = json_close(actual, expected)\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 7,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3     python3-pip     build-essential     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     pdfplumber==0.11.9     openpyxl==3.1.5     pandas==2.3.3     rapidfuzz==3.14.3\n\nWORKDIR /root\n\nCOPY coldchain_charge_packets.pdf /root/coldchain_charge_packets.pdf\nCOPY carrier_registry.xlsx /root/carrier_registry.xlsx\nCOPY shipment_authorizations.csv /root/shipment_authorizations.csv\nCOPY shipment_snapshots.csv /root/shipment_snapshots.csv\n",
+        "shipment_authorizations.csv": "shipment_ref,expected_charge,carrier_id,record_state\nSH-7101,820.0,CR901,approved\nSH-7102,915.0,CR902,approved\nSH-7103,730.0,CR903,approved\nSH-7104,1200.0,CR904,draft\nSH-7105,640.0,CR905,approved\n",
+        "shipment_snapshots.csv": "shipment_ref,snapshot_seq,snapshot_state,expected_charge,carrier_id\nSH-7101,1,approved,830.0,CR901\nSH-7102,1,approved,915.0,CR902\nSH-7103,1,approved,745.0,CR903\nSH-7103,2,approved,,CR903\nSH-7103,3,draft,760.0,CR903\nSH-7105,1,approved,640.0,CR905\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "carrier_registry.xlsx",
+          "coldchain_charge_packets.pdf"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Document-Fraud-Detection\\warehouse-coldchain-charge-review\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "GPT-5.4",
+            "author_email": "gpt54@example.com",
+            "difficulty": "hard",
+            "category": "data-validation",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "csv",
+              "json",
+              "fuzzy-matching",
+              "cold-chain"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-8a5656ba0597542f"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "clinical-trial-participant-release-audit",
+      "category": "Document-Fraud-Detection",
+      "family_id": "Document-Fraud-Detection",
+      "description": "You are reconciling participant release requests for a clinical trials payment team.\n\nAnalyze these files:\n- `/root/participant_release_bundle.pdf`: request pages plus cover or resubmission pages\n- `/root/participant_registry.xlsx`: `participants` sheet with approved participants and `aliases` sheet with known name variants\n- `/root/award_catalog.json`: award entries grouped under sponsor and program containers\n- `/root/release_versions.csv`: optional award version overrides\n\nUse these rules:\n- Only pages whose first non-empty line is exactly `Participant Release Request` are in scope. Ignore all other pages completely.\n- Each in-scope page contains `Packet Ref` and `Revision No`.\n- If multiple in-scope pages share the same `Packet Ref`, evaluate only the page with the highest `Revision No`. If the same `Packet Ref` and `Revision No` appears more than once, keep only the later page in the PDF.\n- Match participant names against the workbook, including known aliases. Minor typos or small formatting variations can appear in the PDF names.\n- Flatten all award entries under every sponsor and program container in `award_catalog.json`.\n- Use only flattened award entries where `status` is `active`.\n- In `release_versions.csv`, use only rows where `approval_state` is `approved` and both `version_amount` and `participant_code` are non-empty.\n- If multiple usable version rows exist for the same `award_ref`, keep the row with the highest `version_no` and use both its `version_amount` and `participant_code`.\n\nA retained request page is suspicious if it meets ANY of the following criteria:\n- Unknown Participant: the participant name does not resolve to any participant in the workbook.\n- Account Mismatch: the participant exists, but the payment token on the PDF does not match the participant record.\n- Invalid Award Ref: the award reference is missing from the valid flattened award set.\n- Amount Mismatch: the award exists, but the requested amount differs from the expected amount by more than `0.01` after applying the version rule above.\n- Participant Mismatch: the award exists, but it belongs to a different `participant_code` than the matched participant after applying the version rule above.\n\nWrite only the flagged retained request pages to `/root/participant_release_flags.json`.\n\nRequirements:\n- Use the original 1-based PDF page numbers of the retained request pages.\n- Sort the JSON array by `request_page_number` ascending.\n- Copy `participant_name` and `payment_token` exactly as they appear on the PDF.\n- If a retained request page has no `Award Ref` line, set `award_ref` to `null`. Otherwise copy the award reference exactly as shown, even if it later proves invalid.\n- `reason` must be one of: `Unknown Participant`, `Account Mismatch`, `Invalid Award Ref`, `Amount Mismatch`, `Participant Mismatch`.\n- If multiple reasons apply, use the first reason in the order listed above.\n\nRequired JSON structure:\n```json\n[\n  {\n    \"request_page_number\": 9,\n    \"participant_name\": \"Dana Holt\",\n    \"requested_amount\": 1050.0,\n    \"payment_token\": \"PT-1004\",\n    \"award_ref\": \"AR-5004\",\n    \"reason\": \"Amount Mismatch\"\n  }\n]\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\nimport json\nfrom pathlib import Path\n\nOUTPUT_PATH = Path('/root/participant_release_flags.json')\nGROUND_TRUTH_PATH = Path(__file__).with_name('ground_truth.json')\nPAGE_KEY = 'request_page_number'\nREQUIRED_KEYS = ['request_page_number', 'participant_name', 'requested_amount', 'payment_token', 'award_ref', 'reason']\n\n\ndef load_json(path: Path):\n    return json.loads(path.read_text(encoding='utf-8'))\n\n\ndef json_close(actual, expected, tol=0.01):\n    \"\"\"Compare two JSON structures with numeric tolerance.\"\"\"\n    if isinstance(actual, dict) and isinstance(expected, dict):\n        if set(actual.keys()) != set(expected.keys()):\n            return False, f\"Key mismatch: {set(actual.keys())} vs {set(expected.keys())}\"\n        for k in expected:\n            ok, msg = json_close(actual[k], expected[k], tol)\n            if not ok:\n                return False, f\"At key '{k}': {msg}\"\n        return True, \"\"\n    elif isinstance(actual, list) and isinstance(expected, list):\n        if len(actual) != len(expected):\n            return False, f\"Length mismatch: {len(actual)} vs {len(expected)}\"\n        for i in range(len(actual)):\n            ok, msg = json_close(actual[i], expected[i], tol)\n            if not ok:\n                return False, f\"At index {i}: {msg}\"\n        return True, \"\"\n    elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):\n        if abs(float(actual) - float(expected)) > tol:\n            return False, f\"Numeric mismatch: {actual} vs {expected} (tol={tol})\"\n        return True, \"\"\n    elif isinstance(actual, str) and isinstance(expected, str):\n        if actual.strip() != expected.strip():\n            return False, f\"String mismatch: '{actual}' vs '{expected}'\"\n        return True, \"\"\n    else:\n        if actual != expected:\n            return False, f\"Value mismatch: {actual} vs {expected}\"\n        return True, \"\"\n\n\ndef test_output_exists():\n    assert OUTPUT_PATH.exists(), f'Missing required output: {OUTPUT_PATH}'\n\n\ndef test_output_matches_ground_truth():\n    actual = load_json(OUTPUT_PATH)\n    expected = load_json(GROUND_TRUTH_PATH)\n\n    assert isinstance(actual, list), 'Output must be a JSON array.'\n    assert [row[PAGE_KEY] for row in actual] == sorted(row[PAGE_KEY] for row in actual), 'Rows must be sorted by page number ascending.'\n    for row in actual:\n        assert set(row.keys()) == set(REQUIRED_KEYS), f'Unexpected keys in row: {row}'\n    ok, msg = json_close(actual, expected)\n    assert ok, msg\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 8,
+      "dependencies": [],
+      "files": {
+        "award_catalog.json": "{\n  \"sponsors\": [\n    {\n      \"sponsor_name\": \"AlphaBio\",\n      \"programs\": [\n        {\n          \"program_id\": \"PG-A\",\n          \"awards\": [\n            {\n              \"award_ref\": \"AR-5001\",\n              \"participant_code\": \"PC1001\",\n              \"approved_amount\": 1200.0,\n              \"status\": \"active\"\n            },\n            {\n              \"award_ref\": \"AR-5002\",\n              \"participant_code\": \"PC1002\",\n              \"approved_amount\": 1400.0,\n              \"status\": \"active\"\n            }\n          ]\n        },\n        {\n          \"program_id\": \"PG-B\",\n          \"awards\": [\n            {\n              \"award_ref\": \"AR-5003\",\n              \"participant_code\": \"PC1003\",\n              \"approved_amount\": 900.0,\n              \"status\": \"archived\"\n            },\n            {\n              \"award_ref\": \"AR-5004\",\n              \"participant_code\": \"PC1004\",\n              \"approved_amount\": 1000.0,\n              \"status\": \"active\"\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"sponsor_name\": \"CellNova\",\n      \"programs\": [\n        {\n          \"program_id\": \"PG-C\",\n          \"awards\": [\n            {\n              \"award_ref\": \"AR-5005\",\n              \"participant_code\": \"PC1005\",\n              \"approved_amount\": 880.0,\n              \"status\": \"active\"\n            },\n            {\n              \"award_ref\": \"AR-5006\",\n              \"participant_code\": \"PC1005\",\n              \"approved_amount\": 750.0,\n              \"status\": \"active\"\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}\n",
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     python3     python3-pip     build-essential     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages     pytest==8.4.1     pytest-json-ctrf==0.3.5     pdfplumber==0.11.9     openpyxl==3.1.5     pandas==2.3.3     rapidfuzz==3.14.3\n\nWORKDIR /root\n\nCOPY participant_release_bundle.pdf /root/participant_release_bundle.pdf\nCOPY participant_registry.xlsx /root/participant_registry.xlsx\nCOPY award_catalog.json /root/award_catalog.json\nCOPY release_versions.csv /root/release_versions.csv\n",
+        "release_versions.csv": "award_ref,version_no,approval_state,version_amount,participant_code\nAR-5002,1,approved,1450.0,PC1002\nAR-5002,2,approved,,PC1002\nAR-5004,1,approved,1025.0,PC1004\nAR-5006,1,approved,,PC1005\nAR-5006,2,approved,760.0,PC1005\nAR-5005,1,rejected,900.0,PC1005\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "participant_registry.xlsx",
+          "participant_release_bundle.pdf"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Document-Fraud-Detection\\clinical-trial-participant-release-audit\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "GPT-5.4",
+            "author_email": "gpt54@example.com",
+            "difficulty": "hard",
+            "category": "data-validation",
+            "tags": [
+              "pdf",
+              "xlsx",
+              "csv",
+              "json",
+              "fuzzy-matching",
+              "clinical-payments"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-3ebfcd2b56d098d1"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    }
+  ]
+}

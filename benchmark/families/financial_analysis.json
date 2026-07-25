@@ -1,0 +1,124 @@
+{
+  "family_id": "financial_analysis",
+  "description": "同一技能 expense_ratio_analysis 的递增难度序列：从求和，到分类汇总、占比计算、Top-N 排序，最终组合成完整财务报告。",
+  "skill_name": "expense_ratio_analysis",
+  "tasks": [
+    {
+      "task_id": "financial_analysis_d1_total",
+      "category": "financial_analysis",
+      "family_id": "financial_analysis",
+      "description": "Write a Python function named `total_amount` that takes `records` (list of dicts, each with an 'amount' numeric key) and returns the sum of all 'amount' values. Empty list returns 0.",
+      "required_skills": ["expense_ratio_analysis"],
+      "difficulty": 1,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "total_amount",
+        "test_cases": [
+          {"inputs": [[{"amount": 10}, {"amount": 20.5}]], "expected": 30.5, "description": "两条记录求和"},
+          {"inputs": [[]], "expected": 0, "description": "空列表返回0"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 1}
+    },
+    {
+      "task_id": "financial_analysis_d2_category_totals",
+      "category": "financial_analysis",
+      "family_id": "financial_analysis",
+      "description": "Write a Python function named `category_totals` that takes `records` (list of dicts with 'category' and 'amount' keys) and returns a dict mapping each category to the sum of its 'amount' values.",
+      "required_skills": ["expense_ratio_analysis"],
+      "difficulty": 2,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "category_totals",
+        "test_cases": [
+          {
+            "inputs": [[{"category": "food", "amount": 10}, {"category": "food", "amount": 5}, {"category": "rent", "amount": 100}]],
+            "expected": {"food": 15, "rent": 100},
+            "description": "按类别汇总"
+          },
+          {"inputs": [[]], "expected": {}, "description": "空列表返回空dict"}
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 2}
+    },
+    {
+      "task_id": "financial_analysis_d3_ratio",
+      "category": "financial_analysis",
+      "family_id": "financial_analysis",
+      "description": "Write a Python function named `expense_ratio` that takes `records` (list of dicts with 'category' and 'amount' keys) and `total_budget` (number). Compute per-category totals (like `category_totals`), then return a dict mapping category to round(total / total_budget, 4).",
+      "required_skills": ["expense_ratio_analysis"],
+      "difficulty": 3,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "expense_ratio",
+        "test_cases": [
+          {
+            "inputs": [[{"category": "food", "amount": 25}, {"category": "rent", "amount": 75}], 100],
+            "expected": {"food": 0.25, "rent": 0.75},
+            "description": "占比计算"
+          },
+          {
+            "inputs": [[{"category": "a", "amount": 1}, {"category": "a", "amount": 1}], 4],
+            "expected": {"a": 0.5},
+            "description": "同类别累加后再算占比"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 3}
+    },
+    {
+      "task_id": "financial_analysis_d4_top_n",
+      "category": "financial_analysis",
+      "family_id": "financial_analysis",
+      "description": "Write a Python function named `top_n_categories` that takes `records` (list of dicts with 'category' and 'amount' keys) and `n` (int). Compute per-category totals, sort categories by total amount descending, and return a list of the top `n` category names.",
+      "required_skills": ["expense_ratio_analysis"],
+      "difficulty": 4,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "top_n_categories",
+        "test_cases": [
+          {
+            "inputs": [[{"category": "food", "amount": 10}, {"category": "rent", "amount": 50}, {"category": "fun", "amount": 30}], 2],
+            "expected": ["rent", "fun"],
+            "description": "取前2大类别"
+          },
+          {
+            "inputs": [[{"category": "a", "amount": 5}, {"category": "b", "amount": 1}], 1],
+            "expected": ["a"],
+            "description": "取前1大类别"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 4}
+    },
+    {
+      "task_id": "financial_analysis_d5_report",
+      "category": "financial_analysis",
+      "family_id": "financial_analysis",
+      "description": "Write a Python function named `financial_report` that takes `records`, `total_budget`, and `n`. Return a dict with three keys: 'category_totals' (dict), 'ratios' (dict, each value rounded to 4 decimals), and 'top_categories' (list of top n category names by total amount descending). This combines all the skills from the previous tasks in this family into one report.",
+      "required_skills": ["expense_ratio_analysis"],
+      "difficulty": 5,
+      "verification": {
+        "type": "function_test",
+        "entry_point": "financial_report",
+        "test_cases": [
+          {
+            "inputs": [[{"category": "food", "amount": 25}, {"category": "rent", "amount": 75}], 100, 1],
+            "expected": {
+              "category_totals": {"food": 25, "rent": 75},
+              "ratios": {"food": 0.25, "rent": 0.75},
+              "top_categories": ["rent"]
+            },
+            "description": "完整财务报告"
+          }
+        ],
+        "timeout_seconds": 5
+      },
+      "metadata": {"source": "skillflow_style_family_v1", "family_step": 5}
+    }
+  ]
+}

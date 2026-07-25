@@ -1,0 +1,83 @@
+selection_method: official_task_metadata_difficulty_medoids
+full_benchmark:
+  family_count: 20
+  task_count: 166
+  unranked_tasks_appended_by_loader_rule:
+    Financial-Statement-Rolling:
+    - harbor_gdpval_20
+    Supply-Chain-Replenishment:
+    - harbor_gdpval_21
+  missing_ranking_references_skipped_by_loader_rule:
+    Operational-Recovery-Planning:
+    - new_task_4_authorization_review_recovery
+family_subset:
+- Cross-Format-Data-Reconciliation
+- PPT-Formatting-Optimization
+- Compensation-Scenario-Modeling
+tiers:
+  easy:
+    family_id: Cross-Format-Data-Reconciliation
+    task_count: 8
+    mean_difficulty: 2.0
+    task_ids_in_official_order:
+    - 01-cloud-service-portfolio-diff
+    - 02-hospital-capacity-portfolio-diff
+    - 03-retail-supply-category-diff
+    - 04-university-program-funding-diff
+    - 05-datacenter-hardware-registry-diff
+    - 06-hospital-medication-reconciliation
+    - 07-shipping-container-manifest-diff
+    - 08-university-course-catalog-diff
+    difficulty_labels_in_official_order:
+    - easy
+    - easy
+    - medium
+    - medium
+    - medium
+    - medium
+    - hard
+    - hard
+  medium:
+    family_id: PPT-Formatting-Optimization
+    task_count: 8
+    mean_difficulty: 2.25
+    task_ids_in_official_order:
+    - museum-exhibit-caption-cleanup
+    - wildlife-field-guide-caption-cleanup
+    - coastal-trail-caption-cleanup
+    - property-portfolio-caption-cleanup
+    - transit-platform-caption-cleanup
+    - incident-briefing-caption-cleanup
+    - archive-photo-caption-cleanup
+    - storm-damage-caption-cleanup
+    difficulty_labels_in_official_order:
+    - medium
+    - medium
+    - medium
+    - medium
+    - medium
+    - medium
+    - hard
+    - hard
+  hard:
+    family_id: Compensation-Scenario-Modeling
+    task_count: 8
+    mean_difficulty: 3.0
+    task_ids_in_official_order:
+    - 01_orchestra_foundation_model
+    - 02_orchestra_archive_refresh_model
+    - 03_university_faculty_model
+    - 04_university_termload_refresh_model
+    - 05_property_management_model
+    - 06_property_portfolio_refresh_model
+    - 07_airline_crew_model
+    - 08_construction_union_model
+    difficulty_labels_in_official_order:
+    - hard
+    - hard
+    - hard
+    - hard
+    - hard
+    - hard
+    - hard
+    - hard

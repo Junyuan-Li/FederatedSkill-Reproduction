@@ -1,0 +1,652 @@
+{
+  "family_id": "OCR-Data-Extraction",
+  "description": "真实 SkillFlow family: OCR-Data-Extraction（8 个递增难度任务）",
+  "skill_name": "OCR-Data-Extraction",
+  "tasks": [
+    {
+      "task_id": "task_family_pharmacy_labels",
+      "category": "OCR-Data-Extraction",
+      "family_id": "OCR-Data-Extraction",
+      "description": "## Task description\n\nIn `/app/workspace/dataset/img`, there are 18 photographed pharmacy shelf labels and price tags. Each image contains product information including:\n- Product name\n- Expiry date or manufacture date\n- Price (may appear with different currency symbols: $, RM, MYR, or no symbol)\n\nRead all image files under the given path, extract the date and price from each, and write the results into an Excel file `/app/workspace/pharmacy_prices.xlsx`.\n\nThe output Excel file must:\n- Contain exactly one sheet named \"products\"\n- Have 3 columns in this order: `filename`, `date`, `price`\n  - `filename`: the source filename (e.g., \"pharm_001.jpg\")\n  - `date`: the expiry or manufacture date in ISO format YYYY-MM-DD. If both dates appear, prefer the expiry date.\n  - `price`: the price as a string with exactly two decimal places (e.g., \"12.99\")\n- If extraction fails for any field, set it to null (empty cell)\n- The first row must be the column headers\n- Data rows must be ordered by filename in ascending order\n- No extra columns, rows, or sheets\n\n## Extraction guidelines\n\n### Date extraction\nPharmacy labels use various date formats:\n- EXP: DD/MM/YYYY, DD-MM-YYYY, MM/YYYY, MM-YYYY\n- MFG: DD/MM/YYYY, DD-MM-YYYY, MM/YYYY\n- Sometimes written as \"EXPIRY:\", \"EXPIRES:\", \"MANUFACTURED:\", \"MFG DATE:\"\n\nPriority order for date selection:\n1. EXPIRY/EXP date (highest priority)\n2. EXPIRES date\n3. MANUFACTURED/MFG date (lowest priority)\n\nIf only month/year is given (e.g., 12/2025), use the first day of that month (2025-12-01).\n\n### Price extraction\nPrices may appear in these formats:\n- With currency symbols: $12.99, RM 12.99, MYR 12.99\n- Without symbols: 12.99, 12.99 each\n- With comma separators: 1,234.56\n\nLook for keywords near the price:\n- PRICE, PRICE:, RM, MYR, $\n- TOTAL, TOTAL PRICE\n- Labels ending with \"EACH\" often indicate unit price\n\n### Noise handling\nPharmacy labels often have:\n- Background colors and patterns\n- Small text\n- Stickers or overlays\n- Handwritten annotations\n\nSome images may be blurry or have low contrast. Try multiple OCR strategies.\n\n## Pre-installed libraries\n\nThe following libraries are already installed:\n- Tesseract OCR (tesseract-ocr)\n- pytesseract\n- Pillow (PIL)\n- openpyxl\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest verification for pharmacy label extraction task.\n\"\"\"\n\nimport os\nfrom typing import Any\nfrom openpyxl import load_workbook\n\n\ndef rows_match(actual_rows, expected_rows, tol=0.01):\n    \"\"\"Compare rows with numeric tolerance for amount fields.\"\"\"\n    if len(actual_rows) != len(expected_rows):\n        return False, f\"Row count mismatch: {len(actual_rows)} vs {len(expected_rows)}\"\n    for i, (ar, er) in enumerate(zip(actual_rows, expected_rows)):\n        if len(ar) != len(er):\n            return False, f\"Row {i} column count mismatch: {len(ar)} vs {len(er)}\"\n        for j, (a, e) in enumerate(zip(ar, er)):\n            a_s, e_s = str(a).strip(), str(e).strip()\n            # Try numeric comparison\n            try:\n                a_f, e_f = float(a_s.replace(',', '')), float(e_s.replace(',', ''))\n                if abs(a_f - e_f) > tol:\n                    return False, f\"Row {i} col {j}: numeric mismatch {a_s} vs {e_s}\"\n            except (ValueError, TypeError):\n                if a_s != e_s:\n                    return False, f\"Row {i} col {j}: text mismatch '{a_s}' vs '{e_s}'\"\n    return True, \"\"\n\n\ndef _cell_to_string(value: Any) -> str:\n    if value is None:\n        return \"\"\n    return str(value)\n\n\ndef _read_sheet_as_string_rows(path: str, sheet_name: str, *, data_only: bool = True) -> list[list[str]]:\n    wb = load_workbook(path, data_only=data_only)\n    try:\n        ws = wb[sheet_name]\n        max_row = ws.max_row or 0\n        max_col = ws.max_column or 0\n        rows: list[list[str]] = []\n        for r in range(1, max_row + 1):\n            rows.append([_cell_to_string(ws.cell(row=r, column=c).value) for c in range(1, max_col + 1)])\n        return rows\n    finally:\n        wb.close()\n\n\ndef _get_sheetnames(path: str, *, data_only: bool = True) -> list[str]:\n    wb = load_workbook(path, data_only=data_only)\n    try:\n        return list(wb.sheetnames)\n    finally:\n        wb.close()\n\n\ndef test_outputs():\n    \"\"\"Test that the pharmacy label extraction outputs are correct.\"\"\"\n    \n    OUTPUT_FILE = \"/app/workspace/pharmacy_prices.xlsx\"\n    EXPECTED_FILE = os.path.join(os.path.dirname(__file__), \"pharmacy_oracle.xlsx\")\n    \n    # Requirement: output file exists\n    assert os.path.exists(OUTPUT_FILE), \"pharmacy_prices.xlsx not found at /app/workspace\"\n    \n    # Requirement: single sheet named \"products\"\n    actual_sheets = _get_sheetnames(OUTPUT_FILE)\n    assert actual_sheets == [\"products\"], (\n        f\"Requirement failed: workbook must contain exactly one sheet named 'products'.\\n\"\n        f\"Actual sheets: {actual_sheets}\"\n    )\n    \n    # Read both files\n    actual_rows = _read_sheet_as_string_rows(OUTPUT_FILE, \"products\")\n    expected_rows = _read_sheet_as_string_rows(EXPECTED_FILE, \"products\")\n    \n    # Requirement: correct header\n    expected_header = [\"filename\", \"date\", \"price\"]\n    actual_header = actual_rows[0] if actual_rows else []\n    assert actual_header == expected_header, (\n        f\"Requirement failed: header/schema mismatch.\\n\"\n        f\"Actual header:   {actual_header}\\n\"\n        f\"Expected header: {expected_header}\"\n    )\n    \n    # Requirement: rows ordered by filename\n    data_rows = actual_rows[1:]\n    data_rows = [r for r in data_rows if len(r) >= 1 and r[0].strip() != \"\"]\n    filenames = [r[0] for r in data_rows]\n    assert filenames == sorted(filenames), (\n        f\"Requirement failed: rows are not ordered by filename.\\n\"\n        f\"Actual order:   {filenames}\\n\"\n        f\"Sorted order:   {sorted(filenames)}\"\n    )\n    \n    # Requirement: match with oracle (with numeric tolerance)\n    ok, msg = rows_match(actual_rows, expected_rows)\n    assert ok, f\"Oracle mismatch: {msg}\"\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 1,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     python3-pil     python3-openpyxl     python3-pytest     tesseract-ocr     libtesseract-dev     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages pytest-json-ctrf==0.3.5\n\nCOPY workspace /app/workspace\n\nWORKDIR /app/workspace\n",
+        "workspace\\pharm004_ocr_dump.txt": "VAR=auto CFG=--psm 6\nProduct: Viamin.€ 100mg,\n\n---\nVAR=auto CFG=--psm 4\n\n---\nVAR=auto CFG=--psm 11\nPHARMACY\n\n‘Vitamie.C 1060me\n\nMVE 1549\n\n---\nVAR=sharp CFG=--psm 6\nProduct Vierin€ 100ims,\n\n---\nVAR=sharp CFG=--psm 4\n\n---\nVAR=sharp CFG=--psm 11\n6 1660mg\n\n---\nVAR=thresh CFG=--psm 6\nBRARMACY PRODUET\nProduct Vilarin, 10009,\n\n---\nVAR=thresh CFG=--psm 4\n\n---\nVAR=thresh CFG=--psm 11\n&\n\n---\n",
+        "workspace\\pytesseract.py": "from __future__ import annotations\n\nimport csv\nimport io\nimport os\nimport shlex\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nfrom typing import Any\n\nfrom PIL import Image\n\n\nclass TesseractNotFoundError(RuntimeError):\n    pass\n\n\nclass _Output:\n    STRING = 'string'\n    BYTES = 'bytes'\n    DICT = 'dict'\n\n\nOutput = _Output()\n\n\nclass _PytesseractState:\n    tesseract_cmd = 'tesseract'\n\n\npytesseract = _PytesseractState()\n\n\ndef _prepare_image(image: Any):\n    if isinstance(image, Image.Image):\n        handle = tempfile.NamedTemporaryFile(delete=False, suffix='.png')\n        handle.close()\n        image.save(handle.name)\n        return handle.name, True\n    return os.fspath(image), False\n\n\ndef _run_tesseract(image: Any, *, config: str = '', lang: str | None = None, extra: list[str] | None = None) -> str:\n    image_path, should_cleanup = _prepare_image(image)\n    cmd = [pytesseract.tesseract_cmd, image_path, 'stdout']\n    if lang:\n        cmd.extend(['-l', lang])\n    if config:\n        cmd.extend(shlex.split(config))\n    if extra:\n        cmd.extend(extra)\n    try:\n        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n    finally:\n        if should_cleanup:\n            Path(image_path).unlink(missing_ok=True)\n\n\ndef image_to_string(image: Any, lang: str | None = None, config: str = '', **_: Any) -> str:\n    return _run_tesseract(image, config=config, lang=lang)\n\n\ndef image_to_data(image: Any, lang: str | None = None, config: str = '', output_type: Any = None, **_: Any):\n    raw = _run_tesseract(image, config=config, lang=lang, extra=['tsv'])\n    if output_type == Output.DICT:\n        reader = csv.DictReader(io.StringIO(raw), delimiter='\\t')\n        fieldnames = reader.fieldnames or []\n        result = {name: [] for name in fieldnames}\n        for row in reader:\n            for key in fieldnames:\n                value = row.get(key, '')\n                if key in {'level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num', 'left', 'top', 'width', 'height'}:\n                    try:\n                        result[key].append(int(value))\n                    except Exception:\n                        result[key].append(-1)\n                elif key == 'conf':\n                    try:\n                        result[key].append(float(value))\n                    except Exception:\n                        result[key].append(-1.0)\n                else:\n                    result[key].append(value)\n        return result\n    return raw\n\n\ndef get_tesseract_version() -> str:\n    try:\n        proc = subprocess.run([pytesseract.tesseract_cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout.splitlines()[0] if proc.stdout else ''\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          ".DS_Store",
+          "workspace\\.DS_Store",
+          "workspace\\__pycache__\\pytesseract.cpython-312.pyc",
+          "workspace\\dataset\\.DS_Store",
+          "workspace\\dataset\\img\\pharm_001.jpg",
+          "workspace\\dataset\\img\\pharm_002.jpg",
+          "workspace\\dataset\\img\\pharm_003.jpg",
+          "workspace\\dataset\\img\\pharm_004.jpg",
+          "workspace\\dataset\\img\\pharm_005.jpg",
+          "workspace\\dataset\\img\\pharm_006.jpg",
+          "workspace\\dataset\\img\\pharm_007.jpg",
+          "workspace\\dataset\\img\\pharm_008.jpg",
+          "workspace\\dataset\\img\\pharm_009.jpg",
+          "workspace\\dataset\\img\\pharm_010.jpg",
+          "workspace\\dataset\\img\\pharm_011.jpg",
+          "workspace\\dataset\\img\\pharm_012.jpg",
+          "workspace\\dataset\\img\\pharm_013.jpg",
+          "workspace\\dataset\\img\\pharm_014.jpg",
+          "workspace\\dataset\\img\\pharm_015.jpg",
+          "workspace\\dataset\\img\\pharm_016.jpg",
+          "workspace\\dataset\\img\\pharm_017.jpg",
+          "workspace\\dataset\\img\\pharm_018.jpg"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\OCR-Data-Extraction\\task_family_pharmacy_labels\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Benchmark Designer",
+            "author_email": "benchmark@example.com",
+            "difficulty": "hard",
+            "category": "data extraction",
+            "tags": [
+              "image ocr",
+              "pharmacy labels",
+              "price tags"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 4,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-4adffb84d67a3207"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "task_family_ecommerce_orders",
+      "category": "OCR-Data-Extraction",
+      "family_id": "OCR-Data-Extraction",
+      "description": "## Task description\n\nIn `/app/workspace/dataset/img`, there are 20 scanned e-commerce shipping order images. Each order contains:\n- Order date\n- Order ID (unique identifier)\n- Item details with quantity and unit price\n- Total amount\n\nRead all image files, extract the data, and write the results into an Excel file `/app/workspace/orders_summary.xlsx`.\n\nThe output Excel file must:\n- Contain exactly one sheet named \"orders\"\n- Have 4 columns in this order: `filename`, `order_id`, `date`, `total_amount`\n  - `filename`: the source filename (e.g., \"order_001.jpg\")\n  - `order_id`: the order identifier (alphanumeric, e.g., \"ORD-2024-00123\")\n  - `date`: the order date in ISO format YYYY-MM-DD\n  - `total_amount`: the total amount as a string with exactly two decimal places (e.g., \"156.78\")\n- If extraction fails for any field, set it to null (empty cell)\n- The first row must be the column headers\n- Data rows must be ordered by filename in ascending order\n- No extra columns, rows, or sheets\n\nAdditionally, there is a reference file `/app/workspace/dataset/known_orders.csv` that contains a list of known valid order IDs. You should:\n- Verify that each extracted order_id exists in this reference file\n- If an order_id is NOT in the reference file, set order_id to null (but keep the filename, date, and total_amount)\n\n## Extraction guidelines\n\n### Order ID\nOrder IDs typically appear with labels like:\n- ORDER ID, Order No., ORDER NO, Order Number, ORDER#\n- Format examples: ORD-2024-00123, SO-2024-456, INV-789456\n\n### Date\nDates may appear in various formats:\n- ORDER DATE, Date, Order Date\n- DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD\n\n### Total amount\nLook for:\n- TOTAL, GRAND TOTAL, ORDER TOTAL, TOTAL DUE, AMOUNT DUE\n- May include currency symbols: $, RM, MYR\n\nSkip lines containing:\n- SUBTOTAL, SUB TOTAL, TAX, GST, SHIPPING, DELIVERY FEE, DISCOUNT\n\nSome orders may have the total split across multiple lines (keyword on one line, amount on the next).\n\n### Duplicate handling\nSome images may be duplicates (same order_id appears in multiple files). In such cases:\n- Keep only the FIRST occurrence (by filename order)\n- Mark subsequent duplicates by setting all fields to null except filename\n\n## Pre-installed libraries\n\nThe following libraries are already installed:\n- Tesseract OCR (tesseract-ocr)\n- pytesseract\n- Pillow (PIL)\n- openpyxl\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest verification for e-commerce order extraction task.\n\"\"\"\n\nimport os\nfrom typing import Any\nfrom openpyxl import load_workbook\n\n\ndef rows_match(actual_rows, expected_rows, tol=0.01):\n    \"\"\"Compare rows with numeric tolerance for amount fields.\"\"\"\n    if len(actual_rows) != len(expected_rows):\n        return False, f\"Row count mismatch: {len(actual_rows)} vs {len(expected_rows)}\"\n    for i, (ar, er) in enumerate(zip(actual_rows, expected_rows)):\n        if len(ar) != len(er):\n            return False, f\"Row {i} column count mismatch: {len(ar)} vs {len(er)}\"\n        for j, (a, e) in enumerate(zip(ar, er)):\n            a_s, e_s = str(a).strip(), str(e).strip()\n            # Try numeric comparison\n            try:\n                a_f, e_f = float(a_s.replace(',', '')), float(e_s.replace(',', ''))\n                if abs(a_f - e_f) > tol:\n                    return False, f\"Row {i} col {j}: numeric mismatch {a_s} vs {e_s}\"\n            except (ValueError, TypeError):\n                if a_s != e_s:\n                    return False, f\"Row {i} col {j}: text mismatch '{a_s}' vs '{e_s}'\"\n    return True, \"\"\n\n\ndef _cell_to_string(value: Any) -> str:\n    if value is None:\n        return \"\"\n    return str(value)\n\n\ndef _read_sheet_as_string_rows(path: str, sheet_name: str, *, data_only: bool = True) -> list[list[str]]:\n    wb = load_workbook(path, data_only=data_only)\n    try:\n        ws = wb[sheet_name]\n        max_row = ws.max_row or 0\n        max_col = ws.max_column or 0\n        rows: list[list[str]] = []\n        for r in range(1, max_row + 1):\n            rows.append([_cell_to_string(ws.cell(row=r, column=c).value) for c in range(1, max_col + 1)])\n        return rows\n    finally:\n        wb.close()\n\n\ndef _get_sheetnames(path: str, *, data_only: bool = True) -> list[str]:\n    wb = load_workbook(path, data_only=data_only)\n    try:\n        return list(wb.sheetnames)\n    finally:\n        wb.close()\n\n\ndef test_outputs():\n    \"\"\"Test that the e-commerce order extraction outputs are correct.\"\"\"\n    \n    OUTPUT_FILE = \"/app/workspace/orders_summary.xlsx\"\n    EXPECTED_FILE = os.path.join(os.path.dirname(__file__), \"orders_oracle.xlsx\")\n    \n    # Requirement: output file exists\n    assert os.path.exists(OUTPUT_FILE), \"orders_summary.xlsx not found at /app/workspace\"\n    \n    # Requirement: single sheet named \"orders\"\n    actual_sheets = _get_sheetnames(OUTPUT_FILE)\n    assert actual_sheets == [\"orders\"], (\n        f\"Requirement failed: workbook must contain exactly one sheet named 'orders'.\\n\"\n        f\"Actual sheets: {actual_sheets}\"\n    )\n    \n    # Read both files\n    actual_rows = _read_sheet_as_string_rows(OUTPUT_FILE, \"orders\")\n    expected_rows = _read_sheet_as_string_rows(EXPECTED_FILE, \"orders\")\n    \n    # Requirement: correct header\n    expected_header = [\"filename\", \"order_id\", \"date\", \"total_amount\"]\n    actual_header = actual_rows[0] if actual_rows else []\n    assert actual_header == expected_header, (\n        f\"Requirement failed: header/schema mismatch.\\n\"\n        f\"Actual header:   {actual_header}\\n\"\n        f\"Expected header: {expected_header}\"\n    )\n    \n    # Requirement: rows ordered by filename\n    data_rows = actual_rows[1:]\n    data_rows = [r for r in data_rows if len(r) >= 1 and r[0].strip() != \"\"]\n    filenames = [r[0] for r in data_rows]\n    assert filenames == sorted(filenames), (\n        f\"Requirement failed: rows are not ordered by filename.\\n\"\n        f\"Actual order:   {filenames}\\n\"\n        f\"Sorted order:   {sorted(filenames)}\"\n    )\n    \n    # Requirement: match with oracle (with numeric tolerance)\n    ok, msg = rows_match(actual_rows, expected_rows)\n    assert ok, f\"Oracle mismatch: {msg}\"\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 2,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     python3-pil     python3-openpyxl     python3-pytest     tesseract-ocr     libtesseract-dev     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages pytest-json-ctrf==0.3.5\n\nCOPY workspace /app/workspace\n\nWORKDIR /app/workspace\n",
+        "workspace\\dataset\\known_orders.csv": "order_id\nORD-2024-00123\nORD-2024-00234\nORD-2024-00345\nORD-2024-00456\nORD-2024-00567\nORD-2024-00678\nORD-2024-00789\nORD-2024-00890\nORD-2024-00901\nORD-2024-01012\nORD-2024-01123\nORD-2024-01234\nORD-2024-01345\nORD-2024-01456\nORD-2024-01567\nORD-2024-01678\nORD-2024-01789\nORD-2024-01890\nORD-2024-01901\nORD-2024-02012\nSO-2024-001\nSO-2024-002\nSO-2024-003\nSO-2024-004\nSO-2024-005\nINV-20240001\nINV-20240002\nINV-20240003\nINV-20240004\nINV-20240005\n",
+        "workspace\\pytesseract.py": "from __future__ import annotations\n\nimport csv\nimport io\nimport os\nimport shlex\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nfrom typing import Any\n\nfrom PIL import Image\n\n\nclass TesseractNotFoundError(RuntimeError):\n    pass\n\n\nclass _Output:\n    STRING = 'string'\n    BYTES = 'bytes'\n    DICT = 'dict'\n\n\nOutput = _Output()\n\n\nclass _PytesseractState:\n    tesseract_cmd = 'tesseract'\n\n\npytesseract = _PytesseractState()\n\n\ndef _prepare_image(image: Any):\n    if isinstance(image, Image.Image):\n        handle = tempfile.NamedTemporaryFile(delete=False, suffix='.png')\n        handle.close()\n        image.save(handle.name)\n        return handle.name, True\n    return os.fspath(image), False\n\n\ndef _run_tesseract(image: Any, *, config: str = '', lang: str | None = None, extra: list[str] | None = None) -> str:\n    image_path, should_cleanup = _prepare_image(image)\n    cmd = [pytesseract.tesseract_cmd, image_path, 'stdout']\n    if lang:\n        cmd.extend(['-l', lang])\n    if config:\n        cmd.extend(shlex.split(config))\n    if extra:\n        cmd.extend(extra)\n    try:\n        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n    finally:\n        if should_cleanup:\n            Path(image_path).unlink(missing_ok=True)\n\n\ndef image_to_string(image: Any, lang: str | None = None, config: str = '', **_: Any) -> str:\n    return _run_tesseract(image, config=config, lang=lang)\n\n\ndef image_to_data(image: Any, lang: str | None = None, config: str = '', output_type: Any = None, **_: Any):\n    raw = _run_tesseract(image, config=config, lang=lang, extra=['tsv'])\n    if output_type == Output.DICT:\n        reader = csv.DictReader(io.StringIO(raw), delimiter='\\t')\n        fieldnames = reader.fieldnames or []\n        result = {name: [] for name in fieldnames}\n        for row in reader:\n            for key in fieldnames:\n                value = row.get(key, '')\n                if key in {'level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num', 'left', 'top', 'width', 'height'}:\n                    try:\n                        result[key].append(int(value))\n                    except Exception:\n                        result[key].append(-1)\n                elif key == 'conf':\n                    try:\n                        result[key].append(float(value))\n                    except Exception:\n                        result[key].append(-1.0)\n                else:\n                    result[key].append(value)\n        return result\n    return raw\n\n\ndef get_tesseract_version() -> str:\n    try:\n        proc = subprocess.run([pytesseract.tesseract_cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout.splitlines()[0] if proc.stdout else ''\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          ".DS_Store",
+          "workspace\\.DS_Store",
+          "workspace\\dataset\\.DS_Store",
+          "workspace\\dataset\\img\\order_001.jpg",
+          "workspace\\dataset\\img\\order_002.jpg",
+          "workspace\\dataset\\img\\order_003.jpg",
+          "workspace\\dataset\\img\\order_004.jpg",
+          "workspace\\dataset\\img\\order_005.jpg",
+          "workspace\\dataset\\img\\order_006.jpg",
+          "workspace\\dataset\\img\\order_007.jpg",
+          "workspace\\dataset\\img\\order_008.jpg",
+          "workspace\\dataset\\img\\order_009.jpg",
+          "workspace\\dataset\\img\\order_010.jpg",
+          "workspace\\dataset\\img\\order_011.jpg",
+          "workspace\\dataset\\img\\order_012.jpg",
+          "workspace\\dataset\\img\\order_013.jpg",
+          "workspace\\dataset\\img\\order_014.jpg",
+          "workspace\\dataset\\img\\order_015.jpg",
+          "workspace\\dataset\\img\\order_016.jpg",
+          "workspace\\dataset\\img\\order_017.jpg",
+          "workspace\\dataset\\img\\order_018.jpg",
+          "workspace\\dataset\\img\\order_019.jpg",
+          "workspace\\dataset\\img\\order_020.jpg"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\OCR-Data-Extraction\\task_family_ecommerce_orders\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Benchmark Designer",
+            "author_email": "benchmark@example.com",
+            "difficulty": "hard",
+            "category": "data extraction",
+            "tags": [
+              "image ocr",
+              "ecommerce orders",
+              "batch processing"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 4,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-0e53f438089b7147"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "task_family_travel_claim_merge",
+      "category": "OCR-Data-Extraction",
+      "family_id": "OCR-Data-Extraction",
+      "description": "## Task description\n\nIn `/app/workspace/dataset/img`, there are 16 scanned travel expense claim images.\nA reference file `/app/workspace/dataset/claim_roster.csv` maps valid `claim_code` values to `employee_id` and `trip_id`.\n\nRead all image files under the given path, extract the claim data, merge in the roster information, and write the final workbook to `/app/workspace/travel_claims.xlsx`.\n\nThe output workbook must:\n- Contain exactly one sheet named `claims`\n- Have exactly these columns in this order:\n  - `filename`\n  - `claim_code`\n  - `employee_id`\n  - `trip_id`\n  - `date`\n  - `total_amount`\n- Use these meanings:\n  - `filename`: source image filename\n  - `claim_code`: extracted claim identifier from the image\n  - `employee_id`: looked up from `claim_roster.csv`\n  - `trip_id`: looked up from `claim_roster.csv`\n  - `date`: transaction date in ISO format `YYYY-MM-DD`\n  - `total_amount`: final reimbursable amount as a string with exactly two decimal places\n- Order rows by filename ascending\n- If `claim_code` is missing from the roster, keep the extracted `claim_code`, `date`, and `total_amount`, but leave `employee_id` and `trip_id` empty\n- If any extracted field is missing, leave that specific cell empty\n- Do not add extra sheets, rows, or columns\n\n## Extraction guidelines\n\n### Claim code\nLook for labels such as:\n- `Claim Code`\n- `Claim Ref`\n- `Expense Code`\n\nThe claim code format is like `CLM-2024-001`.\n\n### Date\nLook for labels such as:\n- `Transaction Date`\n- `Purchase Date`\n- `Date`\n\nDates may appear as:\n- `DD/MM/YYYY`\n- `DD-MM-YYYY`\n- `MM/DD/YYYY`\n- `YYYY-MM-DD`\n\nIf a date is ambiguous, prefer `DD/MM/YYYY`.\n\n### Final amount\nLook for the final reimbursable amount using these keywords:\n- `REIMBURSABLE TOTAL`\n- `TOTAL CLAIM`\n- `AMOUNT CLAIMED`\n- `TOTAL DUE`\n\nIgnore lines containing:\n- `ADVANCE`\n- `CASH PAID`\n- `TIP`\n- `TAX`\n\nSome claims place the keyword on one line and the number on the next line.\n\n## Pre-installed libraries\n\nThe following libraries are already installed:\n- Tesseract OCR (`tesseract-ocr`)\n- `pytesseract`\n- `Pillow`\n- `openpyxl`\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Task verifier.\"\"\"\nimport os\nfrom typing import Any\nfrom openpyxl import load_workbook\n\n\ndef rows_match(actual_rows, expected_rows, tol=0.01):\n    \"\"\"Compare rows with numeric tolerance for amount fields.\"\"\"\n    if len(actual_rows) != len(expected_rows):\n        return False, f\"Row count mismatch: {len(actual_rows)} vs {len(expected_rows)}\"\n    for i, (ar, er) in enumerate(zip(actual_rows, expected_rows)):\n        if len(ar) != len(er):\n            return False, f\"Row {i} column count mismatch: {len(ar)} vs {len(er)}\"\n        for j, (a, e) in enumerate(zip(ar, er)):\n            a_s, e_s = str(a).strip(), str(e).strip()\n            # Try numeric comparison\n            try:\n                a_f, e_f = float(a_s.replace(',', '')), float(e_s.replace(',', ''))\n                if abs(a_f - e_f) > tol:\n                    return False, f\"Row {i} col {j}: numeric mismatch {a_s} vs {e_s}\"\n            except (ValueError, TypeError):\n                if a_s != e_s:\n                    return False, f\"Row {i} col {j}: text mismatch '{a_s}' vs '{e_s}'\"\n    return True, \"\"\n\n\ndef _cell_to_string(value: Any) -> str:\n    return '' if value is None else str(value)\n\n\ndef _read_rows(path: str, sheet_name: str):\n    wb = load_workbook(path, data_only=True)\n    try:\n        ws = wb[sheet_name]\n        rows = []\n        for r in range(1, (ws.max_row or 0) + 1):\n            rows.append([_cell_to_string(ws.cell(row=r, column=c).value) for c in range(1, (ws.max_column or 0) + 1)])\n        return rows\n    finally:\n        wb.close()\n\n\ndef _sheet_names(path: str):\n    wb = load_workbook(path, data_only=True)\n    try:\n        return list(wb.sheetnames)\n    finally:\n        wb.close()\n\n\ndef test_outputs():\n    output_file = '/app/workspace/travel_claims.xlsx'\n    expected_file = os.path.join(os.path.dirname(__file__), 'travel_claims_oracle.xlsx')\n    assert os.path.exists(output_file), f'Missing output: {output_file}'\n    actual_sheets = _sheet_names(output_file)\n    assert actual_sheets == ['claims'], f'Unexpected sheets: {actual_sheets}'\n    actual_rows = _read_rows(output_file, 'claims')\n    expected_rows = _read_rows(expected_file, 'claims')\n    assert actual_rows, 'Workbook is empty'\n    assert actual_rows[0] == ['filename', 'claim_code', 'employee_id', 'trip_id', 'date', 'total_amount'], f'Header mismatch: {actual_rows[0]}'\n    data_rows = [row for row in actual_rows[1:] if row and row[0] != '']\n    ordering = [row[0] for row in data_rows]\n    assert ordering == sorted(ordering), f'Rows not sorted as required: {ordering}'\n    ok, msg = rows_match(actual_rows, expected_rows)\n    assert ok, f'Workbook differs from oracle: {msg}'\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 3,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     python3-pil     python3-openpyxl     python3-pytest     tesseract-ocr     libtesseract-dev     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages pytest-json-ctrf==0.3.5\n\nCOPY workspace /app/workspace\n\nWORKDIR /app/workspace\n",
+        "workspace\\dataset\\claim_roster.csv": "claim_code,employee_id,trip_id\nCLM-2024-001,EMP-101,TRIP-9001\nCLM-2024-002,EMP-102,TRIP-9002\nCLM-2024-003,EMP-103,TRIP-9003\nCLM-2024-004,EMP-104,TRIP-9004\nCLM-2024-005,EMP-105,TRIP-9005\nCLM-2024-006,EMP-106,TRIP-9006\nCLM-2024-007,EMP-107,TRIP-9007\nCLM-2024-008,EMP-108,TRIP-9008\nCLM-2024-009,EMP-109,TRIP-9009\nCLM-2024-010,EMP-110,TRIP-9010\nCLM-2024-011,EMP-111,TRIP-9011\nCLM-2024-012,EMP-112,TRIP-9012\n",
+        "workspace\\pytesseract.py": "from __future__ import annotations\n\nimport csv\nimport io\nimport os\nimport shlex\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nfrom typing import Any\n\nfrom PIL import Image\n\n\nclass TesseractNotFoundError(RuntimeError):\n    pass\n\n\nclass _Output:\n    STRING = 'string'\n    BYTES = 'bytes'\n    DICT = 'dict'\n\n\nOutput = _Output()\n\n\nclass _PytesseractState:\n    tesseract_cmd = 'tesseract'\n\n\npytesseract = _PytesseractState()\n\n\ndef _prepare_image(image: Any):\n    if isinstance(image, Image.Image):\n        handle = tempfile.NamedTemporaryFile(delete=False, suffix='.png')\n        handle.close()\n        image.save(handle.name)\n        return handle.name, True\n    return os.fspath(image), False\n\n\ndef _run_tesseract(image: Any, *, config: str = '', lang: str | None = None, extra: list[str] | None = None) -> str:\n    image_path, should_cleanup = _prepare_image(image)\n    cmd = [pytesseract.tesseract_cmd, image_path, 'stdout']\n    if lang:\n        cmd.extend(['-l', lang])\n    if config:\n        cmd.extend(shlex.split(config))\n    if extra:\n        cmd.extend(extra)\n    try:\n        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n    finally:\n        if should_cleanup:\n            Path(image_path).unlink(missing_ok=True)\n\n\ndef image_to_string(image: Any, lang: str | None = None, config: str = '', **_: Any) -> str:\n    return _run_tesseract(image, config=config, lang=lang)\n\n\ndef image_to_data(image: Any, lang: str | None = None, config: str = '', output_type: Any = None, **_: Any):\n    raw = _run_tesseract(image, config=config, lang=lang, extra=['tsv'])\n    if output_type == Output.DICT:\n        reader = csv.DictReader(io.StringIO(raw), delimiter='\\t')\n        fieldnames = reader.fieldnames or []\n        result = {name: [] for name in fieldnames}\n        for row in reader:\n            for key in fieldnames:\n                value = row.get(key, '')\n                if key in {'level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num', 'left', 'top', 'width', 'height'}:\n                    try:\n                        result[key].append(int(value))\n                    except Exception:\n                        result[key].append(-1)\n                elif key == 'conf':\n                    try:\n                        result[key].append(float(value))\n                    except Exception:\n                        result[key].append(-1.0)\n                else:\n                    result[key].append(value)\n        return result\n    return raw\n\n\ndef get_tesseract_version() -> str:\n    try:\n        proc = subprocess.run([pytesseract.tesseract_cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout.splitlines()[0] if proc.stdout else ''\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "workspace\\dataset\\img\\claim_001.jpg",
+          "workspace\\dataset\\img\\claim_002.jpg",
+          "workspace\\dataset\\img\\claim_003.jpg",
+          "workspace\\dataset\\img\\claim_004.jpg",
+          "workspace\\dataset\\img\\claim_005.jpg",
+          "workspace\\dataset\\img\\claim_006.jpg",
+          "workspace\\dataset\\img\\claim_007.jpg",
+          "workspace\\dataset\\img\\claim_008.jpg",
+          "workspace\\dataset\\img\\claim_009.jpg",
+          "workspace\\dataset\\img\\claim_010.jpg",
+          "workspace\\dataset\\img\\claim_011.jpg",
+          "workspace\\dataset\\img\\claim_012.jpg",
+          "workspace\\dataset\\img\\claim_013.jpg",
+          "workspace\\dataset\\img\\claim_014.jpg",
+          "workspace\\dataset\\img\\claim_015.jpg",
+          "workspace\\dataset\\img\\claim_016.jpg"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\OCR-Data-Extraction\\task_family_travel_claim_merge\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Benchmark Designer",
+            "author_email": "benchmark@example.com",
+            "difficulty": "hard",
+            "category": "data extraction",
+            "tags": [
+              "image ocr",
+              "travel claims",
+              "csv merge"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 4,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-650750c3ca77eaea"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "task_family_invoice_images",
+      "category": "OCR-Data-Extraction",
+      "family_id": "OCR-Data-Extraction",
+      "description": "## Task description\n\nIn `/app/workspace/dataset/img`, there are 15 scanned invoice images. Each invoice contains text such as invoice date, vendor name, and total amount. The text consists of digits and English characters.\n\nRead all image files under the given path, extract the invoice date and total amount from each image, and write the results into an Excel file `/app/workspace/invoice_summary.xlsx`.\n\nThe output Excel file must:\n- Contain exactly one sheet named \"invoices\"\n- Have 3 columns in this order: `filename`, `date`, `total_amount`\n  - `filename`: the source filename (e.g., \"inv_001.jpg\")\n  - `date`: the invoice date in ISO format YYYY-MM-DD\n  - `total_amount`: the monetary value as a string with exactly two decimal places (e.g., \"1250.50\")\n- If extraction fails for any field, set it to null (empty cell)\n- The first row must be the column headers\n- Data rows must be ordered by filename in ascending order\n- No extra columns, rows, or sheets\n\n## Extraction guidelines\n\nLook for the total amount by finding lines containing these keywords (priority from highest to lowest):\n- GRAND TOTAL\n- TOTAL DUE\n- AMOUNT DUE\n- TOTAL\n- AMOUNT\n\nSkip lines that also contain these exclusion keywords:\n- SUBTOTAL\n- SUB TOTAL\n- TAX\n- GST\n- DISCOUNT\n- CHANGE\n\nThe total amount may include comma separators (e.g., 1,234.56) or currency symbols. Extract only the numeric value.\n\nFor dates, common formats on the invoices include:\n- DD/MM/YYYY\n- MM/DD/YYYY\n- DD-MM-YYYY\n- YYYY-MM-DD\n\nConvert all dates to ISO format (YYYY-MM-DD). If a date appears ambiguous (e.g., 01/02/2024), prefer the DD/MM/YYYY interpretation.\n\n## Pre-installed libraries\n\nThe following libraries are already installed:\n- Tesseract OCR (tesseract-ocr)\n- pytesseract\n- Pillow (PIL)\n- openpyxl\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest verification for invoice extraction task.\n\"\"\"\n\nimport os\nfrom typing import Any\nfrom openpyxl import load_workbook\n\n\ndef rows_match(actual_rows, expected_rows, tol=0.01):\n    \"\"\"Compare rows with numeric tolerance for amount fields.\"\"\"\n    if len(actual_rows) != len(expected_rows):\n        return False, f\"Row count mismatch: {len(actual_rows)} vs {len(expected_rows)}\"\n    for i, (ar, er) in enumerate(zip(actual_rows, expected_rows)):\n        if len(ar) != len(er):\n            return False, f\"Row {i} column count mismatch: {len(ar)} vs {len(er)}\"\n        for j, (a, e) in enumerate(zip(ar, er)):\n            a_s, e_s = str(a).strip(), str(e).strip()\n            # Try numeric comparison\n            try:\n                a_f, e_f = float(a_s.replace(',', '')), float(e_s.replace(',', ''))\n                if abs(a_f - e_f) > tol:\n                    return False, f\"Row {i} col {j}: numeric mismatch {a_s} vs {e_s}\"\n            except (ValueError, TypeError):\n                if a_s != e_s:\n                    return False, f\"Row {i} col {j}: text mismatch '{a_s}' vs '{e_s}'\"\n    return True, \"\"\n\n\ndef _cell_to_string(value: Any) -> str:\n    if value is None:\n        return \"\"\n    return str(value)\n\n\ndef _read_sheet_as_string_rows(path: str, sheet_name: str, *, data_only: bool = True) -> list[list[str]]:\n    wb = load_workbook(path, data_only=data_only)\n    try:\n        ws = wb[sheet_name]\n        max_row = ws.max_row or 0\n        max_col = ws.max_column or 0\n        rows: list[list[str]] = []\n        for r in range(1, max_row + 1):\n            rows.append([_cell_to_string(ws.cell(row=r, column=c).value) for c in range(1, max_col + 1)])\n        return rows\n    finally:\n        wb.close()\n\n\ndef _get_sheetnames(path: str, *, data_only: bool = True) -> list[str]:\n    wb = load_workbook(path, data_only=data_only)\n    try:\n        return list(wb.sheetnames)\n    finally:\n        wb.close()\n\n\ndef test_outputs():\n    \"\"\"Test that the invoice extraction outputs are correct.\"\"\"\n    \n    OUTPUT_FILE = \"/app/workspace/invoice_summary.xlsx\"\n    EXPECTED_FILE = os.path.join(os.path.dirname(__file__), \"invoice_oracle.xlsx\")\n    \n    # Requirement: output file exists\n    assert os.path.exists(OUTPUT_FILE), \"invoice_summary.xlsx not found at /app/workspace\"\n    \n    # Requirement: single sheet named \"invoices\"\n    actual_sheets = _get_sheetnames(OUTPUT_FILE)\n    assert actual_sheets == [\"invoices\"], (\n        f\"Requirement failed: workbook must contain exactly one sheet named 'invoices'.\\n\"\n        f\"Actual sheets: {actual_sheets}\"\n    )\n    \n    # Read both files\n    actual_rows = _read_sheet_as_string_rows(OUTPUT_FILE, \"invoices\")\n    expected_rows = _read_sheet_as_string_rows(EXPECTED_FILE, \"invoices\")\n    \n    # Requirement: correct header\n    expected_header = [\"filename\", \"date\", \"total_amount\"]\n    actual_header = actual_rows[0] if actual_rows else []\n    assert actual_header == expected_header, (\n        f\"Requirement failed: header/schema mismatch.\\n\"\n        f\"Actual header:   {actual_header}\\n\"\n        f\"Expected header: {expected_header}\"\n    )\n    \n    # Requirement: rows ordered by filename\n    data_rows = actual_rows[1:]\n    data_rows = [r for r in data_rows if len(r) >= 1 and r[0].strip() != \"\"]\n    filenames = [r[0] for r in data_rows]\n    assert filenames == sorted(filenames), (\n        f\"Requirement failed: rows are not ordered by filename.\\n\"\n        f\"Actual order:   {filenames}\\n\"\n        f\"Sorted order:   {sorted(filenames)}\"\n    )\n    \n    # Requirement: match with oracle (with numeric tolerance)\n    ok, msg = rows_match(actual_rows, expected_rows)\n    assert ok, f\"Oracle mismatch: {msg}\"\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 4,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     python3-pil     python3-openpyxl     python3-pytest     tesseract-ocr     libtesseract-dev     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages pytest-json-ctrf==0.3.5\n\nCOPY workspace /app/workspace\n\nWORKDIR /app/workspace\n",
+        "workspace\\inv003_ocr_dump.txt": "VAR=auto CFG=--psm 6\nINVOICE\n\nDate: 2024-03-03\n\nInvoice No: INV-01002\n\nItem Description Qty Price\nWidget A 5 $25.99\nWidget B 10 $15.50\nService Fee 1 $50.00\nSUBTOTAL: $334.95\n\nTAX: $33.49\n\nTOTAL: $368.44\n\n---\nVAR=auto CFG=--psm 4\nINVOICE\n\nDate: 2024-03-03\nInvoice No: INV-01002\n\nItem Description Qty Price\nWidget A 5 $25.99\nWidget B 10 $15.50\nService Fee 1 $50.00\n\nSUBTOTAL: $334.95\nTAX: $33.49\nTOTAL: $368.44\n\n---\nVAR=auto CFG=--psm 11\nINVOICE\n\nDate: 2024-03-03\n\nInvoice No: INV-01002\n\nItem Description\n\nQty Price\n\nWidget A\n\n5\n\n$25.99\n\n10\n\nWidget B\n\n$15.50\n\nService Fee\n\n1\n\n$50.00\n\nSUBTOTAL: $334.95\n\nTAX: $33.49\n\nTOTAL: $368.44\n\n---\nVAR=sharp CFG=--psm 6\nINVOICE\n\nDate: 2024-03-03\n\nInvoice No: INV-01002\n\nItem Description Qty Price\nWidget A 5 $25.99\nWidget B 10 $15.50\nService Fee 1 $50.00\nSUBTOTAL: $334.95\n\nTAX: $33.49\n\nTOTAL: $368.44\n\n---\nVAR=sharp CFG=--psm 4\nINVOICE\n\nDate: 2024-03-03\nInvoice No: INV-01002\n\nItem Description Qty Price\nWidget A 5 $25.99\nWidget B 10 $15.50\nService Fee 1 $50.00\n\nSUBTOTAL: $334.95\nTAX: $33.49\nTOTAL: $368.44\n\n---\nVAR=sharp CFG=--psm 11\nINVOICE\n\nDate: 2024-03-03\n\nInvoice No: INV-01002\n\nItem Description\n\nQty Price\n\nWidget A\n\n5\n\n$25.99\n\n10\n\nWidget B\n\n$15.50\n\nService Fee\n\n1\n\n$50.00\n\nSUBTOTAL: $334.95\n\nTAX: $33.49\n\nTOTAL: $368.44\n\n---\nVAR=thresh CFG=--psm 6\nINVOICE\n\nDate: 2024-03-03\n\nInvoice No: INV-01002\n\nItem Description Qty Price\nWidget A 5 $25.99\nWidget B 10 = $15.50\nService Fee 1 $50.00\nSUBTOTAL: $334.95\n\nTAX: $33.49\n\nTOTAL: $368.44\n\n---\nVAR=thresh CFG=--psm 4\nINVOICE\n\nDate: 2024-03-03\nInvoice No: INV-01002\n\nItem Description Qty Price\nWidget A 5 $25.99\nWidget B 10 = $15.50\nService Fee 1 $50.00\n\nSUBTOTAL: $334.95\nTAX: $33.49\nTOTAL: $368.44\n\n---\nVAR=thresh CFG=--psm 11\nINVOICE\n\nDate: 2024-03-03\n\nInvoice No: INV-01002\n\nItem Description\n\nQty Price\n\nWidget A\n\n5\n\n$25.99\n\n10\n\nWidget B\n\n$15.50\n\nService Fee\n\n1\n\n$50.00\n\nSUBTOTAL: $334.95\n\nTAX: $33.49\n\nTOTAL: $368.44\n\n---\n",
+        "workspace\\pytesseract.py": "from __future__ import annotations\n\nimport csv\nimport io\nimport os\nimport shlex\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nfrom typing import Any\n\nfrom PIL import Image\n\n\nclass TesseractNotFoundError(RuntimeError):\n    pass\n\n\nclass _Output:\n    STRING = 'string'\n    BYTES = 'bytes'\n    DICT = 'dict'\n\n\nOutput = _Output()\n\n\nclass _PytesseractState:\n    tesseract_cmd = 'tesseract'\n\n\npytesseract = _PytesseractState()\n\n\ndef _prepare_image(image: Any):\n    if isinstance(image, Image.Image):\n        handle = tempfile.NamedTemporaryFile(delete=False, suffix='.png')\n        handle.close()\n        image.save(handle.name)\n        return handle.name, True\n    return os.fspath(image), False\n\n\ndef _run_tesseract(image: Any, *, config: str = '', lang: str | None = None, extra: list[str] | None = None) -> str:\n    image_path, should_cleanup = _prepare_image(image)\n    cmd = [pytesseract.tesseract_cmd, image_path, 'stdout']\n    if lang:\n        cmd.extend(['-l', lang])\n    if config:\n        cmd.extend(shlex.split(config))\n    if extra:\n        cmd.extend(extra)\n    try:\n        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n    finally:\n        if should_cleanup:\n            Path(image_path).unlink(missing_ok=True)\n\n\ndef image_to_string(image: Any, lang: str | None = None, config: str = '', **_: Any) -> str:\n    return _run_tesseract(image, config=config, lang=lang)\n\n\ndef image_to_data(image: Any, lang: str | None = None, config: str = '', output_type: Any = None, **_: Any):\n    raw = _run_tesseract(image, config=config, lang=lang, extra=['tsv'])\n    if output_type == Output.DICT:\n        reader = csv.DictReader(io.StringIO(raw), delimiter='\\t')\n        fieldnames = reader.fieldnames or []\n        result = {name: [] for name in fieldnames}\n        for row in reader:\n            for key in fieldnames:\n                value = row.get(key, '')\n                if key in {'level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num', 'left', 'top', 'width', 'height'}:\n                    try:\n                        result[key].append(int(value))\n                    except Exception:\n                        result[key].append(-1)\n                elif key == 'conf':\n                    try:\n                        result[key].append(float(value))\n                    except Exception:\n                        result[key].append(-1.0)\n                else:\n                    result[key].append(value)\n        return result\n    return raw\n\n\ndef get_tesseract_version() -> str:\n    try:\n        proc = subprocess.run([pytesseract.tesseract_cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout.splitlines()[0] if proc.stdout else ''\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          ".DS_Store",
+          "workspace\\.DS_Store",
+          "workspace\\__pycache__\\pytesseract.cpython-312.pyc",
+          "workspace\\dataset\\.DS_Store",
+          "workspace\\dataset\\img\\inv_001.jpg",
+          "workspace\\dataset\\img\\inv_002.jpg",
+          "workspace\\dataset\\img\\inv_003.jpg",
+          "workspace\\dataset\\img\\inv_004.jpg",
+          "workspace\\dataset\\img\\inv_005.jpg",
+          "workspace\\dataset\\img\\inv_006.jpg",
+          "workspace\\dataset\\img\\inv_007.jpg",
+          "workspace\\dataset\\img\\inv_008.jpg",
+          "workspace\\dataset\\img\\inv_009.jpg",
+          "workspace\\dataset\\img\\inv_010.jpg",
+          "workspace\\dataset\\img\\inv_011.jpg",
+          "workspace\\dataset\\img\\inv_012.jpg",
+          "workspace\\dataset\\img\\inv_013.jpg",
+          "workspace\\dataset\\img\\inv_014.jpg",
+          "workspace\\dataset\\img\\inv_015.jpg"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\OCR-Data-Extraction\\task_family_invoice_images\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Benchmark Designer",
+            "author_email": "benchmark@example.com",
+            "difficulty": "medium",
+            "category": "data extraction",
+            "tags": [
+              "image ocr",
+              "invoice processing",
+              "batch extraction"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 4,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-c9405d2604398edd"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "task_family_utility_bills_template_update",
+      "category": "OCR-Data-Extraction",
+      "family_id": "OCR-Data-Extraction",
+      "description": "## Task description\n\nIn `/app/workspace/dataset/img`, there are 14 scanned utility bill images.\nA workbook template already exists at `/app/workspace/bill_tracker_template.xlsx`.\n\nRead all image files under the given path, extract the bill date and amount due from each image, and update the template workbook.\nSave the final workbook to `/app/workspace/bill_tracker_filled.xlsx`.\n\nThe output workbook must:\n- Keep exactly the same two sheet names as the template: `cover` and `bills`\n- Preserve the `cover` sheet content exactly as it is in the template\n- Write the extracted rows into the `bills` sheet only\n- Keep the `bills` header row exactly as `scan_name`, `bill_date`, `amount_due`\n- Remove any placeholder or old data rows under that header before writing new rows\n- Order the data rows by filename ascending\n- Use these column meanings:\n  - `scan_name`: source image filename\n  - `bill_date`: bill date in ISO format `YYYY-MM-DD`\n  - `amount_due`: amount due as a string with exactly two decimal places\n- If extraction fails for a field, leave that cell empty\n- Do not add extra sheets, columns, or rows outside the required data\n\n## Extraction guidelines\n\n### Date\nLook for lines such as:\n- `Statement Date`\n- `Bill Date`\n- `Date`\n\nDates may appear in these formats:\n- `DD/MM/YYYY`\n- `DD-MM-YYYY`\n- `MM/DD/YYYY`\n- `YYYY-MM-DD`\n\nIf a date is ambiguous, prefer `DD/MM/YYYY`.\n\n### Amount due\nLook for the final payable amount using these keywords, in priority order:\n- `PAY THIS AMOUNT`\n- `AMOUNT DUE`\n- `TOTAL DUE`\n- `CURRENT CHARGES`\n\nIgnore lines containing these distractors:\n- `PREVIOUS BALANCE`\n- `LATE FEE`\n- `TAX`\n- `CREDIT`\n\nSome bills place the keyword on one line and the number on the next line.\nThe amount may contain comma separators like `1,234.56`.\n\n## Pre-installed libraries\n\nThe following libraries are already installed:\n- Tesseract OCR (`tesseract-ocr`)\n- `pytesseract`\n- `Pillow`\n- `openpyxl`\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Task verifier.\"\"\"\nimport os\nfrom typing import Any\nfrom openpyxl import load_workbook\n\n\ndef rows_match(actual_rows, expected_rows, tol=0.01):\n    \"\"\"Compare rows with numeric tolerance for amount fields.\"\"\"\n    if len(actual_rows) != len(expected_rows):\n        return False, f\"Row count mismatch: {len(actual_rows)} vs {len(expected_rows)}\"\n    for i, (ar, er) in enumerate(zip(actual_rows, expected_rows)):\n        if len(ar) != len(er):\n            return False, f\"Row {i} column count mismatch: {len(ar)} vs {len(er)}\"\n        for j, (a, e) in enumerate(zip(ar, er)):\n            a_s, e_s = str(a).strip(), str(e).strip()\n            # Try numeric comparison\n            try:\n                a_f, e_f = float(a_s.replace(',', '')), float(e_s.replace(',', ''))\n                if abs(a_f - e_f) > tol:\n                    return False, f\"Row {i} col {j}: numeric mismatch {a_s} vs {e_s}\"\n            except (ValueError, TypeError):\n                if a_s != e_s:\n                    return False, f\"Row {i} col {j}: text mismatch '{a_s}' vs '{e_s}'\"\n    return True, \"\"\n\n\ndef _cell_to_string(value: Any) -> str:\n    return '' if value is None else str(value)\n\n\ndef _read_rows(path: str, sheet_name: str):\n    wb = load_workbook(path, data_only=True)\n    try:\n        ws = wb[sheet_name]\n        rows = []\n        for r in range(1, (ws.max_row or 0) + 1):\n            rows.append([_cell_to_string(ws.cell(row=r, column=c).value) for c in range(1, (ws.max_column or 0) + 1)])\n        return rows\n    finally:\n        wb.close()\n\n\ndef _sheet_names(path: str):\n    wb = load_workbook(path, data_only=True)\n    try:\n        return list(wb.sheetnames)\n    finally:\n        wb.close()\n\n\ndef test_outputs():\n    output_file = '/app/workspace/bill_tracker_filled.xlsx'\n    expected_file = os.path.join(os.path.dirname(__file__), 'bill_tracker_oracle.xlsx')\n    assert os.path.exists(output_file), f'Missing output: {output_file}'\n    actual_sheets = _sheet_names(output_file)\n    assert actual_sheets == ['cover', 'bills'], f'Unexpected sheets: {actual_sheets}'\n    for sheet_name, header, order_index in [('cover', ['Utility Bill Upload Template'], 0), ('bills', ['scan_name', 'bill_date', 'amount_due'], 0)]:\n        actual_rows = _read_rows(output_file, sheet_name)\n        expected_rows = _read_rows(expected_file, sheet_name)\n        assert actual_rows, f'Sheet {sheet_name} is empty'\n        assert actual_rows[0] == header, f'Header mismatch in {sheet_name}: {actual_rows[0]}'\n        data_rows = [row for row in actual_rows[1:] if row and row[0] != '']\n        ordering = [row[order_index] for row in data_rows]\n        assert ordering == sorted(ordering), f'Rows not sorted in {sheet_name}: {ordering}'\n        ok, msg = rows_match(actual_rows, expected_rows)\n        assert ok, f'Sheet {sheet_name} differs from oracle: {msg}'\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 5,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     python3-pil     python3-openpyxl     python3-pytest     tesseract-ocr     libtesseract-dev     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages pytest-json-ctrf==0.3.5\n\nCOPY workspace /app/workspace\n\nWORKDIR /app/workspace\n",
+        "workspace\\pytesseract.py": "from __future__ import annotations\n\nimport csv\nimport io\nimport os\nimport shlex\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nfrom typing import Any\n\nfrom PIL import Image\n\n\nclass TesseractNotFoundError(RuntimeError):\n    pass\n\n\nclass _Output:\n    STRING = 'string'\n    BYTES = 'bytes'\n    DICT = 'dict'\n\n\nOutput = _Output()\n\n\nclass _PytesseractState:\n    tesseract_cmd = 'tesseract'\n\n\npytesseract = _PytesseractState()\n\n\ndef _prepare_image(image: Any):\n    if isinstance(image, Image.Image):\n        handle = tempfile.NamedTemporaryFile(delete=False, suffix='.png')\n        handle.close()\n        image.save(handle.name)\n        return handle.name, True\n    return os.fspath(image), False\n\n\ndef _run_tesseract(image: Any, *, config: str = '', lang: str | None = None, extra: list[str] | None = None) -> str:\n    image_path, should_cleanup = _prepare_image(image)\n    cmd = [pytesseract.tesseract_cmd, image_path, 'stdout']\n    if lang:\n        cmd.extend(['-l', lang])\n    if config:\n        cmd.extend(shlex.split(config))\n    if extra:\n        cmd.extend(extra)\n    try:\n        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n    finally:\n        if should_cleanup:\n            Path(image_path).unlink(missing_ok=True)\n\n\ndef image_to_string(image: Any, lang: str | None = None, config: str = '', **_: Any) -> str:\n    return _run_tesseract(image, config=config, lang=lang)\n\n\ndef image_to_data(image: Any, lang: str | None = None, config: str = '', output_type: Any = None, **_: Any):\n    raw = _run_tesseract(image, config=config, lang=lang, extra=['tsv'])\n    if output_type == Output.DICT:\n        reader = csv.DictReader(io.StringIO(raw), delimiter='\\t')\n        fieldnames = reader.fieldnames or []\n        result = {name: [] for name in fieldnames}\n        for row in reader:\n            for key in fieldnames:\n                value = row.get(key, '')\n                if key in {'level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num', 'left', 'top', 'width', 'height'}:\n                    try:\n                        result[key].append(int(value))\n                    except Exception:\n                        result[key].append(-1)\n                elif key == 'conf':\n                    try:\n                        result[key].append(float(value))\n                    except Exception:\n                        result[key].append(-1.0)\n                else:\n                    result[key].append(value)\n        return result\n    return raw\n\n\ndef get_tesseract_version() -> str:\n    try:\n        proc = subprocess.run([pytesseract.tesseract_cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout.splitlines()[0] if proc.stdout else ''\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "workspace\\bill_tracker_template.xlsx",
+          "workspace\\dataset\\img\\bill_001.jpg",
+          "workspace\\dataset\\img\\bill_002.jpg",
+          "workspace\\dataset\\img\\bill_003.jpg",
+          "workspace\\dataset\\img\\bill_004.jpg",
+          "workspace\\dataset\\img\\bill_005.jpg",
+          "workspace\\dataset\\img\\bill_006.jpg",
+          "workspace\\dataset\\img\\bill_007.jpg",
+          "workspace\\dataset\\img\\bill_008.jpg",
+          "workspace\\dataset\\img\\bill_009.jpg",
+          "workspace\\dataset\\img\\bill_010.jpg",
+          "workspace\\dataset\\img\\bill_011.jpg",
+          "workspace\\dataset\\img\\bill_012.jpg",
+          "workspace\\dataset\\img\\bill_013.jpg",
+          "workspace\\dataset\\img\\bill_014.jpg"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\OCR-Data-Extraction\\task_family_utility_bills_template_update\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Benchmark Designer",
+            "author_email": "benchmark@example.com",
+            "difficulty": "medium",
+            "category": "data extraction",
+            "tags": [
+              "image ocr",
+              "utility bills",
+              "template update"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 4,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-ab9e40f1d62f7a53"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "task_family_construction_measurement",
+      "category": "OCR-Data-Extraction",
+      "family_id": "OCR-Data-Extraction",
+      "description": "## Task description\n\nIn `/app/workspace/dataset/img`, there are 12 scanned construction measurement forms. Each form contains:\n- Project code (e.g., PROJ-2024-001)\n- Measurement date\n- Item descriptions with quantities, units, and unit prices\n- Total amount for the project\n\nRead all image files, extract the data, and write the results into an Excel file `/app/workspace/construction_summary.xlsx`.\n\nThe output Excel file must contain TWO sheets:\n\n### Sheet 1: \"details\"\nContains individual line items from all forms:\n- 5 columns in this order: `filename`, `project_code`, `item_description`, `quantity`, `unit_price`\n  - `filename`: the source filename (e.g., \"meas_001.jpg\")\n  - `project_code`: the project identifier\n  - `item_description`: description of the measured item\n  - `quantity`: the quantity as a string (may be integer or decimal, e.g., \"10\" or \"15.5\")\n  - `unit_price`: the unit price as a string with exactly two decimal places (e.g., \"125.00\")\n- If extraction fails for any field, set it to null (empty cell)\n- The first row must be column headers\n- Data rows must be ordered by filename, then by item order within each form\n\n### Sheet 2: \"summary\"\nContains the total amount per project:\n- 3 columns in this order: `project_code`, `date`, `total_amount`\n  - `project_code`: the project identifier\n  - `date`: the measurement date in ISO format YYYY-MM-DD\n  - `total_amount`: the total amount for that project as a string with exactly two decimal places\n- If extraction fails for any field, set it to null (empty cell)\n- The first row must be column headers\n- Data rows must be ordered by project_code in ascending order\n- Each project should appear only once\n\n## Extraction guidelines\n\n### Project code\nLook for labels like:\n- PROJECT, PROJECT CODE, PROJ, PROJECT NO, PROJECT ID\n- Format: PROJ-YYYY-NNN (e.g., PROJ-2024-001)\n\n### Date\nMeasurement dates may appear as:\n- DATE, MEASUREMENT DATE, MEAS. DATE, MEAS DATE\n- Formats: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD\n\n### Item details\nConstruction forms typically have tabular structures:\n- Item descriptions may span multiple words\n- Quantity may be followed by unit (m, m², m³, pcs, kg, etc.)\n- Unit price is usually the last numeric column before total\n\nLook for patterns like:\n```\nItem Description        Qty    Unit Price\nConcrete C30            50     150.00\nSteel reinforcement     100    12.50\n```\n\n### Total amount\nProject totals appear with keywords:\n- PROJECT TOTAL, TOTAL, GRAND TOTAL, SUBTOTAL (but use the final/grand total)\n- May be handwritten or printed\n\n### Handwritten annotations\nSome forms contain handwritten notes or corrections. These may be harder to OCR. Try multiple preprocessing strategies.\n\n## Pre-installed libraries\n\nThe following libraries are already installed:\n- Tesseract OCR (tesseract-ocr)\n- pytesseract\n- Pillow (PIL)\n- openpyxl\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest verification for construction measurement extraction task.\n\"\"\"\n\nimport os\nfrom typing import Any\nfrom openpyxl import load_workbook\n\n\ndef rows_match(actual_rows, expected_rows, tol=0.01):\n    \"\"\"Compare rows with numeric tolerance for amount fields.\"\"\"\n    if len(actual_rows) != len(expected_rows):\n        return False, f\"Row count mismatch: {len(actual_rows)} vs {len(expected_rows)}\"\n    for i, (ar, er) in enumerate(zip(actual_rows, expected_rows)):\n        if len(ar) != len(er):\n            return False, f\"Row {i} column count mismatch: {len(ar)} vs {len(er)}\"\n        for j, (a, e) in enumerate(zip(ar, er)):\n            a_s, e_s = str(a).strip(), str(e).strip()\n            # Try numeric comparison\n            try:\n                a_f, e_f = float(a_s.replace(',', '')), float(e_s.replace(',', ''))\n                if abs(a_f - e_f) > tol:\n                    return False, f\"Row {i} col {j}: numeric mismatch {a_s} vs {e_s}\"\n            except (ValueError, TypeError):\n                if a_s != e_s:\n                    return False, f\"Row {i} col {j}: text mismatch '{a_s}' vs '{e_s}'\"\n    return True, \"\"\n\n\ndef _cell_to_string(value: Any) -> str:\n    if value is None:\n        return \"\"\n    return str(value)\n\n\ndef _read_sheet_as_string_rows(path: str, sheet_name: str, *, data_only: bool = True) -> list[list[str]]:\n    wb = load_workbook(path, data_only=data_only)\n    try:\n        ws = wb[sheet_name]\n        max_row = ws.max_row or 0\n        max_col = ws.max_column or 0\n        rows: list[list[str]] = []\n        for r in range(1, max_row + 1):\n            rows.append([_cell_to_string(ws.cell(row=r, column=c).value) for c in range(1, max_col + 1)])\n        return rows\n    finally:\n        wb.close()\n\n\ndef _get_sheetnames(path: str, *, data_only: bool = True) -> list[str]:\n    wb = load_workbook(path, data_only=data_only)\n    try:\n        return list(wb.sheetnames)\n    finally:\n        wb.close()\n\n\ndef test_outputs():\n    \"\"\"Test that the construction measurement extraction outputs are correct.\"\"\"\n    \n    OUTPUT_FILE = \"/app/workspace/construction_summary.xlsx\"\n    EXPECTED_FILE = os.path.join(os.path.dirname(__file__), \"construction_oracle.xlsx\")\n    \n    # Requirement: output file exists\n    assert os.path.exists(OUTPUT_FILE), \"construction_summary.xlsx not found at /app/workspace\"\n    \n    # Requirement: two sheets named \"details\" and \"summary\"\n    actual_sheets = _get_sheetnames(OUTPUT_FILE)\n    assert actual_sheets == [\"details\", \"summary\"], (\n        f\"Requirement failed: workbook must contain exactly two sheets named 'details' and 'summary'.\\n\"\n        f\"Actual sheets: {actual_sheets}\"\n    )\n    \n    # Test details sheet\n    details_rows = _read_sheet_as_string_rows(OUTPUT_FILE, \"details\")\n    expected_details = _read_sheet_as_string_rows(EXPECTED_FILE, \"details\")\n    \n    # Requirement: correct header for details\n    expected_header = [\"filename\", \"project_code\", \"item_description\", \"quantity\", \"unit_price\"]\n    actual_header = details_rows[0] if details_rows else []\n    assert actual_header == expected_header, (\n        f\"Requirement failed: details header/schema mismatch.\\n\"\n        f\"Actual header:   {actual_header}\\n\"\n        f\"Expected header: {expected_header}\"\n    )\n    \n    # Test summary sheet\n    summary_rows = _read_sheet_as_string_rows(OUTPUT_FILE, \"summary\")\n    expected_summary = _read_sheet_as_string_rows(EXPECTED_FILE, \"summary\")\n    \n    # Requirement: correct header for summary\n    expected_summary_header = [\"project_code\", \"date\", \"total_amount\"]\n    actual_summary_header = summary_rows[0] if summary_rows else []\n    assert actual_summary_header == expected_summary_header, (\n        f\"Requirement failed: summary header/schema mismatch.\\n\"\n        f\"Actual header:   {actual_summary_header}\\n\"\n        f\"Expected header: {expected_summary_header}\"\n    )\n    \n    # Requirement: summary rows ordered by project_code\n    summary_data = summary_rows[1:]\n    summary_data = [r for r in summary_data if len(r) >= 1 and r[0].strip() != \"\"]\n    project_codes = [r[0] for r in summary_data]\n    assert project_codes == sorted(project_codes), (\n        f\"Requirement failed: summary rows are not ordered by project_code.\\n\"\n        f\"Actual order:   {project_codes}\\n\"\n        f\"Sorted order:   {sorted(project_codes)}\"\n    )\n    \n    # Requirement: match with oracle for both sheets (with numeric tolerance)\n    ok, msg = rows_match(details_rows, expected_details)\n    assert ok, f\"Details oracle mismatch: {msg}\"\n\n    ok, msg = rows_match(summary_rows, expected_summary)\n    assert ok, f\"Summary oracle mismatch: {msg}\"\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 6,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     python3-pil     python3-openpyxl     python3-pytest     tesseract-ocr     libtesseract-dev     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages pytest-json-ctrf==0.3.5\n\nCOPY workspace /app/workspace\n\nWORKDIR /app/workspace\n",
+        "workspace\\meas001_ocr_dump.txt": "VAR=auto CFG=--psm 6\nCONSTRUCTION MEASUREMENT FORM\nPROJECT: PROJ-2024-001\n\nMEAS. DATE: 01-01-2024\n\nItem Description Qty Unit Unit Price\nConcrete C30 50 =m $150.00\n\nSteel reinforcement 100 «kg = $12.50\nBrick work 200 =m? $45.00\n\nPROJECT TOTAL: $1500.00\n\n---\nVAR=auto CFG=--psm 4\nCONSTRUCTION MEASUREMENT FORM\nPROJECT: PROJ-2024-001\nMEAS. DATE: 01-01-2024\n\nItem Description Qty Unit Unit Price\n\nConcrete C30 50 =m $150.00\nSteel reinforcement 100 «kg = $12.50\nBrick work 200 =m? $45.00\n\nPROJECT TOTAL: $1500.00\n\n---\nVAR=auto CFG=--psm 11\nCONSTRUCTION MEASUREMENT FORM\n\nPROJECT: PROJ-2024-001\n\nMEAS. DATE: 01-01-2024\n\nItem Description\n\nQty Unit\n\nUnit Price\n\nConcrete C30\n\n50\n\nms\n\n$150.00\n\nSteel reinforcement\n\n100\n\nkg\n\n$12.50\n\nBrick work\n\n200\n\nm2\n\n$45.00\n\nPROJECT TOTAL: $1500.00\n\n---\nVAR=sharp CFG=--psm 6\nCONSTRUCTION MEASUREMENT FORM\nPROJECT: PROJ-2024-001\n\nMEAS. DATE: 01-01-2024\n\nItem Description Qty Unit Unit Price\nConcrete C30 50 m® $150.00\n\nSteel reinforcement 100 «kg §=$12.50\nBrick work 200 =m? $45.00\n\nPROJECT TOTAL: $1500.00\n\n---\nVAR=sharp CFG=--psm 4\nCONSTRUCTION MEASUREMENT FORM\nPROJECT: PROJ-2024-001\nMEAS. DATE: 01-01-2024\n\nItem Description Qty Unit Unit Price\n\nConcrete C30 50 m® $150.00\nSteel reinforcement 100 «kg §=$12.50\nBrick work 200 =m? $45.00\n\nPROJECT TOTAL: $1500.00\n\n---\nVAR=sharp CFG=--psm 11\nCONSTRUCTION MEASUREMENT FORM\n\nPROJECT: PROJ-2024-001\n\nMEAS. DATE: 01-01-2024\n\nItem Description\n\nQty Unit\n\nUnit Price\n\nConcrete C30\n\n50\n\nms\n\n$150.00\n\nSteel reinforcement\n\n100\n\nkg\n\n$12.50\n\nBrick work\n\n200\n\nme\n\n$45.00\n\nPROJECT TOTAL: $1500.00\n\n---\nVAR=thresh CFG=--psm 6\nCONSTRUCTION MEASUREMENT FORM\nPROJECT: PROJ-2024-001\n\nMEAS. DATE: 01-01-2024\n\nItem Description Qty Unit Unit Price\nConcrete C30 50 om? ~—- $150.00\n\nSteel reinforcement 100 «kg «= $12.50\nBrick work 200 =m? $45.00\n\nPROJECT TOTAL: $1500.00\n\n---\nVAR=thresh CFG=--psm 4\nCONSTRUCTION MEASUREMENT FORM\nPROJECT: PROJ-2024-001\nMEAS. DATE: 01-01-2024\n\nItem Description Qty Unit Unit Price\n\nConcrete C30 50 om? ~—- $150.00\nSteel reinforcement 100 «kg «= $12.50\nBrick work 200 =m? $45.00\n\nPROJECT TOTAL: $1500.00\n\n---\nVAR=thresh CFG=--psm 11\nCONSTRUCTION MEASUREMENT FORM\n\nPROJECT: PROJ-2024-001\n\nMEAS. DATE: 01-01-2024\n\nItem Description\n\nQty Unit\n\nUnit Price\n\nConcrete C30.\n\n50\n\nms\n\n$150.00\n\nSteel reinforcement\n\n100\n\nkg\n\n$12.50\n\nBrick work\n\n200\n\nme\n\n$45.00\n\nPROJECT TOTAL: $1500.00\n\n---\n",
+        "workspace\\pytesseract.py": "from __future__ import annotations\n\nimport csv\nimport io\nimport os\nimport shlex\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nfrom typing import Any\n\nfrom PIL import Image\n\n\nclass TesseractNotFoundError(RuntimeError):\n    pass\n\n\nclass _Output:\n    STRING = 'string'\n    BYTES = 'bytes'\n    DICT = 'dict'\n\n\nOutput = _Output()\n\n\nclass _PytesseractState:\n    tesseract_cmd = 'tesseract'\n\n\npytesseract = _PytesseractState()\n\n\ndef _prepare_image(image: Any):\n    if isinstance(image, Image.Image):\n        handle = tempfile.NamedTemporaryFile(delete=False, suffix='.png')\n        handle.close()\n        image.save(handle.name)\n        return handle.name, True\n    return os.fspath(image), False\n\n\ndef _run_tesseract(image: Any, *, config: str = '', lang: str | None = None, extra: list[str] | None = None) -> str:\n    image_path, should_cleanup = _prepare_image(image)\n    cmd = [pytesseract.tesseract_cmd, image_path, 'stdout']\n    if lang:\n        cmd.extend(['-l', lang])\n    if config:\n        cmd.extend(shlex.split(config))\n    if extra:\n        cmd.extend(extra)\n    try:\n        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n    finally:\n        if should_cleanup:\n            Path(image_path).unlink(missing_ok=True)\n\n\ndef image_to_string(image: Any, lang: str | None = None, config: str = '', **_: Any) -> str:\n    return _run_tesseract(image, config=config, lang=lang)\n\n\ndef image_to_data(image: Any, lang: str | None = None, config: str = '', output_type: Any = None, **_: Any):\n    raw = _run_tesseract(image, config=config, lang=lang, extra=['tsv'])\n    if output_type == Output.DICT:\n        reader = csv.DictReader(io.StringIO(raw), delimiter='\\t')\n        fieldnames = reader.fieldnames or []\n        result = {name: [] for name in fieldnames}\n        for row in reader:\n            for key in fieldnames:\n                value = row.get(key, '')\n                if key in {'level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num', 'left', 'top', 'width', 'height'}:\n                    try:\n                        result[key].append(int(value))\n                    except Exception:\n                        result[key].append(-1)\n                elif key == 'conf':\n                    try:\n                        result[key].append(float(value))\n                    except Exception:\n                        result[key].append(-1.0)\n                else:\n                    result[key].append(value)\n        return result\n    return raw\n\n\ndef get_tesseract_version() -> str:\n    try:\n        proc = subprocess.run([pytesseract.tesseract_cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout.splitlines()[0] if proc.stdout else ''\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          ".DS_Store",
+          "workspace\\.DS_Store",
+          "workspace\\__pycache__\\pytesseract.cpython-312.pyc",
+          "workspace\\dataset\\.DS_Store",
+          "workspace\\dataset\\img\\meas_001.jpg",
+          "workspace\\dataset\\img\\meas_002.jpg",
+          "workspace\\dataset\\img\\meas_003.jpg",
+          "workspace\\dataset\\img\\meas_004.jpg",
+          "workspace\\dataset\\img\\meas_005.jpg",
+          "workspace\\dataset\\img\\meas_006.jpg",
+          "workspace\\dataset\\img\\meas_007.jpg",
+          "workspace\\dataset\\img\\meas_008.jpg",
+          "workspace\\dataset\\img\\meas_009.jpg",
+          "workspace\\dataset\\img\\meas_010.jpg",
+          "workspace\\dataset\\img\\meas_011.jpg",
+          "workspace\\dataset\\img\\meas_012.jpg"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\OCR-Data-Extraction\\task_family_construction_measurement\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Benchmark Designer",
+            "author_email": "benchmark@example.com",
+            "difficulty": "hard",
+            "category": "data extraction",
+            "tags": [
+              "image ocr",
+              "construction measurement",
+              "batch processing"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 4,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-7d814b6451eb90e1"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "task_family_nested_fuel_packets",
+      "category": "OCR-Data-Extraction",
+      "family_id": "OCR-Data-Extraction",
+      "description": "## Task description\n\nUnder `/app/workspace/dataset`, there are nested batch folders containing mixed image packets.\nSome images are fuel purchase receipts, while others are cover sheets, route notes, promotion pages, or loyalty forms.\n\nRecursively scan all image files under `/app/workspace/dataset`, keep only the fuel purchase receipts, and write the final workbook to `/app/workspace/fuel_packets.xlsx`.\n\nThe output workbook must:\n- Contain exactly one sheet named `transactions`\n- Have exactly these columns in this order:\n  - `batch_name`\n  - `relative_path`\n  - `txn_ref`\n  - `date`\n  - `total_amount`\n- Use these meanings:\n  - `batch_name`: the first directory name under `/app/workspace/dataset` for that image\n  - `relative_path`: the image path relative to `/app/workspace/dataset`, using forward slashes\n  - `txn_ref`: the transaction reference from the receipt\n  - `date`: sale date in ISO format `YYYY-MM-DD`\n  - `total_amount`: final paid amount as a string with exactly two decimal places\n- Include only target fuel purchase receipts in the output\n- Ignore cover sheets, route notes, promotion pages, and loyalty forms entirely\n- Sort rows by `relative_path` ascending\n- If the same `txn_ref` appears more than once anywhere in the dataset, keep only the first occurrence by `relative_path` order and exclude later duplicates from the output\n- Do not add extra sheets, rows, or columns\n\n## Extraction guidelines\n\n### Target receipts\nTreat an image as a target fuel receipt only if it contains one of these indicators:\n- `FUEL RECEIPT`\n- `PUMP SALE`\n- `TAX INVOICE`\n\n### Transaction reference\nLook for labels such as:\n- `Txn Ref`\n- `Transaction No`\n- `Ref No`\n\n### Date\nLook for labels such as:\n- `Sale Date`\n- `Date`\n\nDates may appear as:\n- `DD/MM/YYYY`\n- `DD-MM-YYYY`\n- `MM/DD/YYYY`\n- `YYYY-MM-DD`\n\nIf a date is ambiguous, prefer `DD/MM/YYYY`.\n\n### Total amount\nLook for the final paid amount using these keywords:\n- `GRAND TOTAL`\n- `TOTAL AMOUNT`\n- `AMOUNT PAID`\n- `TOTAL`\n\nIgnore lines containing:\n- `DISCOUNT`\n- `CASHBACK`\n- `SAVINGS`\n- `LOYALTY`\n- `TAX`\n\nSome receipts place the keyword on one line and the number on the next line.\n\n## Pre-installed libraries\n\nThe following libraries are already installed:\n- Tesseract OCR (`tesseract-ocr`)\n- `pytesseract`\n- `Pillow`\n- `openpyxl`\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Task verifier.\"\"\"\nimport os\nfrom typing import Any\nfrom openpyxl import load_workbook\n\n\ndef rows_match(actual_rows, expected_rows, tol=0.01):\n    \"\"\"Compare rows with numeric tolerance for amount fields.\"\"\"\n    if len(actual_rows) != len(expected_rows):\n        return False, f\"Row count mismatch: {len(actual_rows)} vs {len(expected_rows)}\"\n    for i, (ar, er) in enumerate(zip(actual_rows, expected_rows)):\n        if len(ar) != len(er):\n            return False, f\"Row {i} column count mismatch: {len(ar)} vs {len(er)}\"\n        for j, (a, e) in enumerate(zip(ar, er)):\n            a_s, e_s = str(a).strip(), str(e).strip()\n            # Try numeric comparison\n            try:\n                a_f, e_f = float(a_s.replace(',', '')), float(e_s.replace(',', ''))\n                if abs(a_f - e_f) > tol:\n                    return False, f\"Row {i} col {j}: numeric mismatch {a_s} vs {e_s}\"\n            except (ValueError, TypeError):\n                if a_s != e_s:\n                    return False, f\"Row {i} col {j}: text mismatch '{a_s}' vs '{e_s}'\"\n    return True, \"\"\n\n\ndef _cell_to_string(value: Any) -> str:\n    return '' if value is None else str(value)\n\n\ndef _read_rows(path: str, sheet_name: str):\n    wb = load_workbook(path, data_only=True)\n    try:\n        ws = wb[sheet_name]\n        rows = []\n        for r in range(1, (ws.max_row or 0) + 1):\n            rows.append([_cell_to_string(ws.cell(row=r, column=c).value) for c in range(1, (ws.max_column or 0) + 1)])\n        return rows\n    finally:\n        wb.close()\n\n\ndef _sheet_names(path: str):\n    wb = load_workbook(path, data_only=True)\n    try:\n        return list(wb.sheetnames)\n    finally:\n        wb.close()\n\n\ndef test_outputs():\n    output_file = '/app/workspace/fuel_packets.xlsx'\n    expected_file = os.path.join(os.path.dirname(__file__), 'fuel_packets_oracle.xlsx')\n    assert os.path.exists(output_file), f'Missing output: {output_file}'\n    actual_sheets = _sheet_names(output_file)\n    assert actual_sheets == ['transactions'], f'Unexpected sheets: {actual_sheets}'\n    actual_rows = _read_rows(output_file, 'transactions')\n    expected_rows = _read_rows(expected_file, 'transactions')\n    assert actual_rows, 'Workbook is empty'\n    assert actual_rows[0] == ['batch_name', 'relative_path', 'txn_ref', 'date', 'total_amount'], f'Header mismatch: {actual_rows[0]}'\n    data_rows = [row for row in actual_rows[1:] if row and row[0] != '']\n    ordering = [row[1] for row in data_rows]\n    assert ordering == sorted(ordering), f'Rows not sorted as required: {ordering}'\n    ok, msg = rows_match(actual_rows, expected_rows)\n    assert ok, f'Workbook differs from oracle: {msg}'\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 7,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     python3-pil     python3-openpyxl     python3-pytest     tesseract-ocr     libtesseract-dev     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages pytest-json-ctrf==0.3.5\n\nCOPY workspace /app/workspace\n\nWORKDIR /app/workspace\n",
+        "workspace\\pytesseract.py": "from __future__ import annotations\n\nimport csv\nimport io\nimport os\nimport shlex\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nfrom typing import Any\n\nfrom PIL import Image\n\n\nclass TesseractNotFoundError(RuntimeError):\n    pass\n\n\nclass _Output:\n    STRING = 'string'\n    BYTES = 'bytes'\n    DICT = 'dict'\n\n\nOutput = _Output()\n\n\nclass _PytesseractState:\n    tesseract_cmd = 'tesseract'\n\n\npytesseract = _PytesseractState()\n\n\ndef _prepare_image(image: Any):\n    if isinstance(image, Image.Image):\n        handle = tempfile.NamedTemporaryFile(delete=False, suffix='.png')\n        handle.close()\n        image.save(handle.name)\n        return handle.name, True\n    return os.fspath(image), False\n\n\ndef _run_tesseract(image: Any, *, config: str = '', lang: str | None = None, extra: list[str] | None = None) -> str:\n    image_path, should_cleanup = _prepare_image(image)\n    cmd = [pytesseract.tesseract_cmd, image_path, 'stdout']\n    if lang:\n        cmd.extend(['-l', lang])\n    if config:\n        cmd.extend(shlex.split(config))\n    if extra:\n        cmd.extend(extra)\n    try:\n        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n    finally:\n        if should_cleanup:\n            Path(image_path).unlink(missing_ok=True)\n\n\ndef image_to_string(image: Any, lang: str | None = None, config: str = '', **_: Any) -> str:\n    return _run_tesseract(image, config=config, lang=lang)\n\n\ndef image_to_data(image: Any, lang: str | None = None, config: str = '', output_type: Any = None, **_: Any):\n    raw = _run_tesseract(image, config=config, lang=lang, extra=['tsv'])\n    if output_type == Output.DICT:\n        reader = csv.DictReader(io.StringIO(raw), delimiter='\\t')\n        fieldnames = reader.fieldnames or []\n        result = {name: [] for name in fieldnames}\n        for row in reader:\n            for key in fieldnames:\n                value = row.get(key, '')\n                if key in {'level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num', 'left', 'top', 'width', 'height'}:\n                    try:\n                        result[key].append(int(value))\n                    except Exception:\n                        result[key].append(-1)\n                elif key == 'conf':\n                    try:\n                        result[key].append(float(value))\n                    except Exception:\n                        result[key].append(-1.0)\n                else:\n                    result[key].append(value)\n        return result\n    return raw\n\n\ndef get_tesseract_version() -> str:\n    try:\n        proc = subprocess.run([pytesseract.tesseract_cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout.splitlines()[0] if proc.stdout else ''\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "workspace\\dataset\\batch_north\\day1\\cover_001.jpg",
+          "workspace\\dataset\\batch_north\\day1\\fuel_001.jpg",
+          "workspace\\dataset\\batch_north\\day2\\fuel_002.jpg",
+          "workspace\\dataset\\batch_north\\day2\\promo_001.jpg",
+          "workspace\\dataset\\batch_south\\day1\\fuel_003.jpg",
+          "workspace\\dataset\\batch_south\\day1\\fuel_dup_001.jpg",
+          "workspace\\dataset\\batch_south\\day2\\fuel_004.jpg",
+          "workspace\\dataset\\batch_south\\day2\\note_001.jpg",
+          "workspace\\dataset\\batch_west\\day1\\fuel_005.jpg",
+          "workspace\\dataset\\batch_west\\day1\\loyalty_001.jpg",
+          "workspace\\dataset\\batch_west\\day2\\fuel_006.jpg",
+          "workspace\\dataset\\batch_west\\day2\\fuel_dup_002.jpg"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\OCR-Data-Extraction\\task_family_nested_fuel_packets\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Benchmark Designer",
+            "author_email": "benchmark@example.com",
+            "difficulty": "hard",
+            "category": "data extraction",
+            "tags": [
+              "image ocr",
+              "fuel receipts",
+              "nested packets"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 4,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-811949407cb94442"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "task_family_case_settlement_packets",
+      "category": "OCR-Data-Extraction",
+      "family_id": "OCR-Data-Extraction",
+      "description": "## Task description\n\nUnder `/app/workspace/dataset/cases`, there are nested case folders containing mixed document images.\nSome images are purchase receipts, some are credit notes, and some are cover/checklist/admin pages that should not be included in the final output.\n\nRecursively scan all image files under `/app/workspace/dataset/cases`, keep only the purchase receipts and credit notes, and write the final workbook to `/app/workspace/case_settlement.xlsx`.\n\nThe output workbook must contain exactly two sheets: `events` and `net_summary`.\n\n### Sheet `events`\nThis sheet must have exactly these columns in this order:\n- `case_id`\n- `relative_path`\n- `document_type`\n- `document_ref`\n- `date`\n- `amount`\n\nColumn meanings:\n- `case_id`: the first directory name under `/app/workspace/dataset/cases`\n- `relative_path`: the image path relative to `/app/workspace/dataset/cases`, using forward slashes\n- `document_type`: either `purchase` or `credit`\n- `document_ref`: extracted reference such as receipt number or credit number\n- `date`: document date in ISO format `YYYY-MM-DD`\n- `amount`: extracted amount as a string with exactly two decimal places\n\nAdditional rules for `events`:\n- Include only purchase receipts and credit notes\n- Ignore cover sheets, checklists, thank-you pages, and other admin pages\n- Sort rows by `case_id`, then by `relative_path`\n- If the same `document_ref` appears more than once anywhere in the dataset, keep only the first occurrence by `relative_path` order and exclude later duplicates\n- If a target document is missing a field, leave only that field empty\n\n### Sheet `net_summary`\nThis sheet must have exactly these columns in this order:\n- `case_id`\n- `purchase_total`\n- `credit_total`\n- `net_amount`\n- `latest_date`\n\nColumn meanings:\n- `purchase_total`: sum of kept purchase amounts for that case\n- `credit_total`: sum of kept credit amounts for that case\n- `net_amount`: `purchase_total - credit_total`\n- `latest_date`: latest kept document date in that case, in ISO format `YYYY-MM-DD`\n\nAdditional rules for `net_summary`:\n- Include exactly one row per `case_id` that has at least one kept target document\n- Sort rows by `case_id` ascending\n- Format all monetary totals as strings with exactly two decimal places\n\n## Extraction guidelines\n\n### Purchase receipts\nTreat a document as a purchase document if it contains one of:\n- `PURCHASE RECEIPT`\n- `TAX INVOICE`\n- `STORE RECEIPT`\n\nUse these amount keywords for purchase documents:\n- `GRAND TOTAL`\n- `TOTAL DUE`\n- `AMOUNT DUE`\n\n### Credit notes\nTreat a document as a credit document if it contains one of:\n- `CREDIT NOTE`\n- `REFUND ADJUSTMENT`\n- `CREDIT MEMO`\n\nUse these amount keywords for credit documents:\n- `CREDIT AMOUNT`\n- `REFUND TOTAL`\n- `TOTAL CREDIT`\n\n### Reference and date\nLook for reference labels such as:\n- `Receipt No`\n- `Credit No`\n- `Reference`\n\nLook for date labels such as:\n- `Issue Date`\n- `Date`\n\nDates may appear as:\n- `DD/MM/YYYY`\n- `DD-MM-YYYY`\n- `MM/DD/YYYY`\n- `YYYY-MM-DD`\n\nIf a date is ambiguous, prefer `DD/MM/YYYY`.\n\nIgnore lines containing:\n- `SUBTOTAL`\n- `TAX`\n- `DISCOUNT`\n\nSome documents place the amount keyword on one line and the number on the next line.\n\n## Pre-installed libraries\n\nThe following libraries are already installed:\n- Tesseract OCR (`tesseract-ocr`)\n- `pytesseract`\n- `Pillow`\n- `openpyxl`\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_pytest_suite() -> None:\n    local_test = Path(__file__).with_name(\"test_outputs.py\")\n    harness_test = Path(\"/tests/test_outputs.py\")\n    test_file = harness_test if harness_test.exists() else local_test\n\n    result = subprocess.run(\n        [sys.executable, \"-m\", \"pytest\", str(test_file), \"-q\"],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"Task verifier.\"\"\"\nimport os\nfrom typing import Any\nfrom openpyxl import load_workbook\n\n\ndef rows_match(actual_rows, expected_rows, tol=0.01):\n    \"\"\"Compare rows with numeric tolerance for amount fields.\"\"\"\n    if len(actual_rows) != len(expected_rows):\n        return False, f\"Row count mismatch: {len(actual_rows)} vs {len(expected_rows)}\"\n    for i, (ar, er) in enumerate(zip(actual_rows, expected_rows)):\n        if len(ar) != len(er):\n            return False, f\"Row {i} column count mismatch: {len(ar)} vs {len(er)}\"\n        for j, (a, e) in enumerate(zip(ar, er)):\n            a_s, e_s = str(a).strip(), str(e).strip()\n            # Try numeric comparison\n            try:\n                a_f, e_f = float(a_s.replace(',', '')), float(e_s.replace(',', ''))\n                if abs(a_f - e_f) > tol:\n                    return False, f\"Row {i} col {j}: numeric mismatch {a_s} vs {e_s}\"\n            except (ValueError, TypeError):\n                if a_s != e_s:\n                    return False, f\"Row {i} col {j}: text mismatch '{a_s}' vs '{e_s}'\"\n    return True, \"\"\n\n\ndef _cell_to_string(value: Any) -> str:\n    return '' if value is None else str(value)\n\n\ndef _read_rows(path: str, sheet_name: str):\n    wb = load_workbook(path, data_only=True)\n    try:\n        ws = wb[sheet_name]\n        rows = []\n        for r in range(1, (ws.max_row or 0) + 1):\n            rows.append([_cell_to_string(ws.cell(row=r, column=c).value) for c in range(1, (ws.max_column or 0) + 1)])\n        return rows\n    finally:\n        wb.close()\n\n\ndef _sheet_names(path: str):\n    wb = load_workbook(path, data_only=True)\n    try:\n        return list(wb.sheetnames)\n    finally:\n        wb.close()\n\n\ndef test_outputs():\n    output_file = '/app/workspace/case_settlement.xlsx'\n    expected_file = os.path.join(os.path.dirname(__file__), 'case_settlement_oracle.xlsx')\n    assert os.path.exists(output_file), f'Missing output: {output_file}'\n    actual_sheets = _sheet_names(output_file)\n    assert actual_sheets == ['events', 'net_summary'], f'Unexpected sheets: {actual_sheets}'\n    for sheet_name, header, order_index in [('events', ['case_id', 'relative_path', 'document_type', 'document_ref', 'date', 'amount'], 0), ('net_summary', ['case_id', 'purchase_total', 'credit_total', 'net_amount', 'latest_date'], 0)]:\n        actual_rows = _read_rows(output_file, sheet_name)\n        expected_rows = _read_rows(expected_file, sheet_name)\n        assert actual_rows, f'Sheet {sheet_name} is empty'\n        assert actual_rows[0] == header, f'Header mismatch in {sheet_name}: {actual_rows[0]}'\n        data_rows = [row for row in actual_rows[1:] if row and row[0] != '']\n        ordering = [row[order_index] for row in data_rows]\n        assert ordering == sorted(ordering), f'Rows not sorted in {sheet_name}: {ordering}'\n        ok, msg = rows_match(actual_rows, expected_rows)\n        assert ok, f'Sheet {sheet_name} differs from oracle: {msg}'\n",
+        "docker_image": null,
+        "timeout_seconds": 600
+      },
+      "difficulty": 8,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y --no-install-recommends     python3     python3-pip     python3-pil     python3-openpyxl     python3-pytest     tesseract-ocr     libtesseract-dev     && rm -rf /var/lib/apt/lists/*\n\nRUN pip3 install --break-system-packages pytest-json-ctrf==0.3.5\n\nCOPY workspace /app/workspace\n\nWORKDIR /app/workspace\n",
+        "workspace\\pytesseract.py": "from __future__ import annotations\n\nimport csv\nimport io\nimport os\nimport shlex\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nfrom typing import Any\n\nfrom PIL import Image\n\n\nclass TesseractNotFoundError(RuntimeError):\n    pass\n\n\nclass _Output:\n    STRING = 'string'\n    BYTES = 'bytes'\n    DICT = 'dict'\n\n\nOutput = _Output()\n\n\nclass _PytesseractState:\n    tesseract_cmd = 'tesseract'\n\n\npytesseract = _PytesseractState()\n\n\ndef _prepare_image(image: Any):\n    if isinstance(image, Image.Image):\n        handle = tempfile.NamedTemporaryFile(delete=False, suffix='.png')\n        handle.close()\n        image.save(handle.name)\n        return handle.name, True\n    return os.fspath(image), False\n\n\ndef _run_tesseract(image: Any, *, config: str = '', lang: str | None = None, extra: list[str] | None = None) -> str:\n    image_path, should_cleanup = _prepare_image(image)\n    cmd = [pytesseract.tesseract_cmd, image_path, 'stdout']\n    if lang:\n        cmd.extend(['-l', lang])\n    if config:\n        cmd.extend(shlex.split(config))\n    if extra:\n        cmd.extend(extra)\n    try:\n        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n    finally:\n        if should_cleanup:\n            Path(image_path).unlink(missing_ok=True)\n\n\ndef image_to_string(image: Any, lang: str | None = None, config: str = '', **_: Any) -> str:\n    return _run_tesseract(image, config=config, lang=lang)\n\n\ndef image_to_data(image: Any, lang: str | None = None, config: str = '', output_type: Any = None, **_: Any):\n    raw = _run_tesseract(image, config=config, lang=lang, extra=['tsv'])\n    if output_type == Output.DICT:\n        reader = csv.DictReader(io.StringIO(raw), delimiter='\\t')\n        fieldnames = reader.fieldnames or []\n        result = {name: [] for name in fieldnames}\n        for row in reader:\n            for key in fieldnames:\n                value = row.get(key, '')\n                if key in {'level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num', 'left', 'top', 'width', 'height'}:\n                    try:\n                        result[key].append(int(value))\n                    except Exception:\n                        result[key].append(-1)\n                elif key == 'conf':\n                    try:\n                        result[key].append(float(value))\n                    except Exception:\n                        result[key].append(-1.0)\n                else:\n                    result[key].append(value)\n        return result\n    return raw\n\n\ndef get_tesseract_version() -> str:\n    try:\n        proc = subprocess.run([pytesseract.tesseract_cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)\n        return proc.stdout.splitlines()[0] if proc.stdout else ''\n    except FileNotFoundError as exc:\n        raise TesseractNotFoundError('tesseract executable not found') from exc\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "workspace\\dataset\\cases\\case_alpha\\admin\\checklist.jpg",
+          "workspace\\dataset\\cases\\case_alpha\\credits\\cred_001.jpg",
+          "workspace\\dataset\\cases\\case_alpha\\purchases\\pur_001.jpg",
+          "workspace\\dataset\\cases\\case_alpha\\purchases\\pur_002.jpg",
+          "workspace\\dataset\\cases\\case_beta\\admin\\cover.jpg",
+          "workspace\\dataset\\cases\\case_beta\\credits\\cred_001.jpg",
+          "workspace\\dataset\\cases\\case_beta\\purchases\\pur_001.jpg",
+          "workspace\\dataset\\cases\\case_beta\\purchases\\pur_002.jpg",
+          "workspace\\dataset\\cases\\case_gamma\\admin\\thanks.jpg",
+          "workspace\\dataset\\cases\\case_gamma\\credits\\cred_001.jpg",
+          "workspace\\dataset\\cases\\case_gamma\\purchases\\pur_001.jpg",
+          "workspace\\dataset\\cases\\case_gamma\\purchases\\pur_002.jpg",
+          "workspace\\dataset\\cases\\case_gamma\\purchases\\pur_dup.jpg"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\OCR-Data-Extraction\\task_family_case_settlement_packets\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "Benchmark Designer",
+            "author_email": "benchmark@example.com",
+            "difficulty": "hard",
+            "category": "data extraction",
+            "tags": [
+              "image ocr",
+              "case packets",
+              "net settlement"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 600.0,
+            "env": {}
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 4,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "gpus": 0,
+            "allow_internet": true,
+            "docker_image": "harbor-prebuilt:task-dbf7f783fd020588"
+          },
+          "solution": {
+            "env": {}
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+setting_name: "Phase0_Setting1_Self_Evolution_Easy"
+description: |
+  Small-scale faithful pipeline verification using the official Setting1
+  worker/model/harness and one complete Easy SkillFlow family.
+federated: false
+
+rounds: 8
+seed: 42
+max_retry: 0
+sampler: "family_curriculum"
+loop_over_families: true
+rounds_per_family_mode: "family_length"
+paper_benchmark_only: true
+family_subset:
+  - "Cross-Format-Data-Reconciliation"
+output_dir: "results/intermediate/phase0/setting1/Cross-Format-Data-Reconciliation"
+
+patcher:
+  temperature: 0.2
+
+workers:
+  - client_id: "u0"
+    backbone_model: "qwen3.6-plus"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "QWEN_DASHSCOPE_API_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false

@@ -1,0 +1,66 @@
+# config/settings.yaml — Agent CLI Harness 声明式映射参考表
+# harness 取值 <-> core.datatypes.WorkerProfile.agent_harness 完全一致；
+# 三个取值 claude-code / qwen-code / kimi-cli 分别对应
+# harness/claude_code_harness.py / qwen_code_harness.py / kimi_cli_harness.py
+# 里的 binary_name（claude / qwen-code / kimi）。
+
+setting1:
+  name: "Self-Evolve"
+  config_file: "experiments/configs/setting_se.yaml"
+  workers:
+    - client_id: u0
+      harness: claude-code
+      model: qwen3.6-plus
+
+setting2:
+  name: "Homogeneous_Federated"
+  config_file: "experiments/configs/setting_homo_fed.yaml"
+  server:
+    harness: claude-code
+    model: glm-5
+  workers:
+    - client_id: u0
+      harness: claude-code
+      model: glm-5
+    - client_id: u1
+      harness: claude-code
+      model: glm-5
+    - client_id: u2
+      harness: claude-code
+      model: glm-5
+
+setting3:
+  name: "Heterogeneous_Backbone"
+  config_file: "experiments/configs/setting_hetero_backbone.yaml"
+  server:
+    harness: claude-code
+    model: glm-5
+  workers:
+    - client_id: u0
+      harness: claude-code
+      model: qwen3.6-plus
+    - client_id: u1
+      harness: claude-code
+      model: glm-5
+    - client_id: u2
+      harness: claude-code
+      model: kimi-k2.5
+
+setting4:
+  name: "Full_Hetero_Federated"
+  config_file: "experiments/configs/setting_full_hetero.yaml"
+  server:
+    harness: claude-code
+    model: glm-5
+  workers:
+    - client_id: u0
+      harness: qwen-code
+      model: qwen3.6-plus
+    - client_id: u1
+      harness: claude-code
+      model: glm-5
+    - client_id: u2
+      harness: kimi-cli
+      model: kimi-k2.5
+
+execution_mode_default: "strict"

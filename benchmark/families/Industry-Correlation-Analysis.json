@@ -1,0 +1,522 @@
+{
+  "family_id": "Industry-Correlation-Analysis",
+  "description": "真实 SkillFlow family: Industry-Correlation-Analysis（8 个递增难度任务）",
+  "skill_name": "Industry-Correlation-Analysis",
+  "tasks": [
+    {
+      "task_id": "econ-service-hospitality-correlation",
+      "category": "Industry-Correlation-Analysis",
+      "family_id": "Industry-Correlation-Analysis",
+      "description": "# Service Demand Synchronization Analysis\n\nIn economic cycle analysis, understanding how different service sectors move together is essential. This task focuses on the co-movement of household hospitality consumption with travel-related spending.\n\n## Goal\n\nCalculate the Pearson correlation coefficient between the detrended real **dining services receipts** and the detrended real **domestic travel outlays** for the years 1994 to 2025 (inclusive).\n\n## Provided Data\n\nThe following datasets are placed in `/root/`:\n\n- `service_table_07.xlsx` – Dining services receipts (nominal, annual with quarterly breakdown for 2025)\n- `service_table_11.xlsx` – Domestic travel outlays (nominal, annual with quarterly breakdown for 2025)\n- `service_price_index.xlsx` – Service price index (2025 = 1.0, for deflation)\n\nEach data table contains a header row with the column label `National total` holding the aggregate value.\n\n### Note on 2025\n\nFor the year 2025, only partial quarterly data is available. Use the average of available quarters as the annual value.\n\n## Requirements\n\n1. Extract the `National total` column from each service table.\n2. Convert nominal values to real values by dividing by the service price index.\n3. Apply the Hodrick-Prescott filter to extract the cyclical component:\n   - Take the natural logarithm of the real series before filtering.\n   - Use λ = 100 (the standard smoothing parameter for annual data).\n4. Compute the Pearson correlation between the two cyclical components.\n5. Write the result to `/root/answer.txt`:\n   - Output **only** the correlation coefficient as a single number.\n   - Round to 5 decimal places.\n\n## Example Output\n\nIf the correlation is 0.812345, your `answer.txt` should contain:\n\n```\n0.81235\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_script_checks() -> None:\n    local_script = Path(__file__).with_name(\"test_outputs.py\")\n    harness_script = Path(\"/tests/test_outputs.py\")\n    script = harness_script if harness_script.exists() else local_script\n\n    result = subprocess.run(\n        [sys.executable, str(script)],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest suite for Task 1 (canonical): service-hospitality correlation.\nVerifies the computed correlation against expected value.\n\"\"\"\n\nimport os\nimport unittest\n\nEXPECTED = 0.97510\n\n\nclass TestServiceHospitalityCorrelation(unittest.TestCase):\n    def get_answer_path(self):\n        for path in [\"/root/answer.txt\", \"answer.txt\"]:\n            if os.path.exists(path):\n                return path\n        return None\n\n    def test_answer_exists(self):\n        self.assertIsNotNone(self.get_answer_path(), \"Expected answer.txt to exist\")\n\n    def test_answer_format(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        self.assertRegex(content, r\"^-?\\d+\\.?\\d*$\", \"Answer must be a valid number\")\n\n    def test_answer_value(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        value = float(content)\n        self.assertAlmostEqual(value, EXPECTED, delta=0.001)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 1,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y \\\n    curl \\\n    git \\\n    vim \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip install --break-system-packages --no-cache-dir \\\n    pandas==2.2.3 \\\n    numpy==1.26.4 \\\n    openpyxl==3.1.5 \\\n    scipy==1.14.1 \\\n    statsmodels==0.14.4\n\nRUN pip install --break-system-packages --no-cache-dir \\\n    pytest==8.4.1 \\\n    pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY service_table_07.xlsx /root/\nCOPY service_table_11.xlsx /root/\nCOPY service_price_index.xlsx /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "service_price_index.xlsx",
+          "service_table_07.xlsx",
+          "service_table_11.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Industry-Correlation-Analysis\\econ-service-hospitality-correlation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "economics",
+            "tags": [
+              "economics",
+              "statistics",
+              "data-analysis",
+              "python",
+              "timeseries",
+              "hp-filter",
+              "xlsx"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-8fdd93f3f4fa7ba4"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "econ-equipment-software-correlation",
+      "category": "Industry-Correlation-Analysis",
+      "family_id": "Industry-Correlation-Analysis",
+      "description": "# Capital Spending Co-Movement Analysis\n\nUnderstanding how different categories of business investment move together over the business cycle is central to macroeconomic analysis. This task examines the synchronization between physical equipment spending and software investment.\n\n## Goal\n\nCalculate the Pearson correlation coefficient between the detrended real **industrial equipment orders** and the detrended real **enterprise software investment** for the years 1992 to 2025 (inclusive).\n\n## Provided Data\n\nThe following datasets are placed in `/root/`:\n\n- `capital_table_03.xlsx` – Industrial equipment orders (nominal, annual with quarterly breakdown for 2025)\n- `capital_table_09.xlsx` – Enterprise software investment (nominal, annual with quarterly breakdown for 2025)\n- `capital_goods_deflator.xlsx` – Capital goods price index (2025 = 1.0, for deflation)\n\nEach data table contains a header row with the column label `Private total` holding the aggregate value.\n\n### Note on 2025\n\nFor the year 2025, only partial quarterly data is available. Use the average of available quarters as the annual value.\n\n## Requirements\n\n1. Extract the `Private total` column from each capital table.\n2. Convert nominal values to real values by dividing by the capital goods price index.\n3. Apply the Hodrick-Prescott filter to extract the cyclical component:\n   - Take the natural logarithm of the real series before filtering.\n   - Use λ = 100 (the standard smoothing parameter for annual data).\n4. Compute the Pearson correlation between the two cyclical components.\n5. Write the result to `/root/answer.txt`:\n   - Output **only** the correlation coefficient as a single number.\n   - Round to 5 decimal places.\n\n## Example Output\n\nIf the correlation is -0.45678, your `answer.txt` should contain:\n\n```\n-0.45678\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_script_checks() -> None:\n    local_script = Path(__file__).with_name(\"test_outputs.py\")\n    harness_script = Path(\"/tests/test_outputs.py\")\n    script = harness_script if harness_script.exists() else local_script\n\n    result = subprocess.run(\n        [sys.executable, str(script)],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest suite for Task 2 (dividend, parameter-only): equipment-software correlation.\n\"\"\"\n\nimport os\nimport unittest\n\nEXPECTED = 0.59552\n\n\nclass TestEquipmentSoftwareCorrelation(unittest.TestCase):\n    def get_answer_path(self):\n        for path in [\"/root/answer.txt\", \"answer.txt\"]:\n            if os.path.exists(path):\n                return path\n        return None\n\n    def test_answer_exists(self):\n        self.assertIsNotNone(self.get_answer_path(), \"Expected answer.txt to exist\")\n\n    def test_answer_format(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        self.assertRegex(content, r\"^-?\\d+\\.?\\d*$\", \"Answer must be a valid number\")\n\n    def test_answer_value(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        value = float(content)\n        self.assertAlmostEqual(value, EXPECTED, delta=0.001)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 2,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y \\\n    curl \\\n    git \\\n    vim \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip install --break-system-packages --no-cache-dir \\\n    pandas==2.2.3 \\\n    numpy==1.26.4 \\\n    openpyxl==3.1.5 \\\n    scipy==1.14.1 \\\n    statsmodels==0.14.4\n\nRUN pip install --break-system-packages --no-cache-dir \\\n    pytest==8.4.1 \\\n    pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY capital_table_03.xlsx /root/\nCOPY capital_table_09.xlsx /root/\nCOPY capital_goods_deflator.xlsx /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "capital_goods_deflator.xlsx",
+          "capital_table_03.xlsx",
+          "capital_table_09.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Industry-Correlation-Analysis\\econ-equipment-software-correlation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "economics",
+            "tags": [
+              "economics",
+              "statistics",
+              "data-analysis",
+              "python",
+              "timeseries",
+              "hp-filter",
+              "xlsx"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-bc2d2f23bcf85d4f"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "econ-broadcasting-advertising-correlation",
+      "category": "Industry-Correlation-Analysis",
+      "family_id": "Industry-Correlation-Analysis",
+      "description": "# Media Revenue Co-Movement Analysis\n\nBroadcasting and advertising markets often expand and contract together over the business cycle. This task measures how closely those two media revenue streams move together after removing long-run trend growth.\n\n## Goal\n\nCalculate the Pearson correlation coefficient between the detrended real **broadcasting carriage receipts** and the detrended real **advertising placement revenue** for the years 1993 to 2025 (inclusive).\n\n## Provided Data\n\nThe following files are placed in `/root/`:\n\n- `media_release_table_05.xlsx` – Broadcasting carriage receipts (nominal, sheet `Broadcasting`)\n- `media_release_table_12.xlsx` – Advertising placement revenue (nominal, sheet `Advertising`)\n- `media_service_prices.xlsx` – Media service price indices (sheet `Media Prices`)\n\nEach release table contains a metadata row before the actual header row. In both release tables, the aggregate series is stored in the column labeled `Domestic total`.\n\n### Note on 2025\n\nOnly partial quarterly data is available for 2025. The quarter labels use `Q1`, `Q2`, and `Q3`. Use the average of the available quarters as the annual 2025 value.\n\n### Deflator Rule\n\nIn `media_service_prices.xlsx`, use the column `Media_Services_Price_2025_Base` for deflation. Ignore the other index columns.\n\n## Requirements\n\n1. Extract the `Domestic total` column from each release table.\n2. Convert nominal values to real values by dividing by `Media_Services_Price_2025_Base`.\n3. Apply the Hodrick-Prescott filter:\n   - Take the natural logarithm of the real series before filtering.\n   - Use λ = 100.\n4. Compute the Pearson correlation between the two cyclical components.\n5. Write the result to `/root/answer.txt`:\n   - Output only the correlation coefficient as a single number.\n   - Round to 5 decimal places.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_script_checks() -> None:\n    local_script = Path(__file__).with_name(\"test_outputs.py\")\n    harness_script = Path(\"/tests/test_outputs.py\")\n    script = harness_script if harness_script.exists() else local_script\n\n    result = subprocess.run(\n        [sys.executable, str(script)],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest suite for TestBroadcastingAdvertisingCorrelation.\n\"\"\"\n\nimport os\nimport unittest\n\nEXPECTED = 0.96366\n\n\nclass TestBroadcastingAdvertisingCorrelation(unittest.TestCase):\n    def get_answer_path(self):\n        for path in [\"/root/answer.txt\", \"answer.txt\"]:\n            if os.path.exists(path):\n                return path\n        return None\n\n    def test_answer_exists(self):\n        self.assertIsNotNone(self.get_answer_path(), \"Expected answer.txt to exist\")\n\n    def test_answer_format(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        self.assertRegex(content, r\"^-?\\d+\\.?\\d*$\", \"Answer must be a valid number\")\n\n    def test_answer_value(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        value = float(content)\n        self.assertAlmostEqual(value, EXPECTED, delta=0.001)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 3,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     curl     git     vim     && rm -rf /var/lib/apt/lists/*\n\nRUN pip install --break-system-packages --no-cache-dir     pandas==2.2.3     numpy==1.26.4     openpyxl==3.1.5     scipy==1.14.1     statsmodels==0.14.4\n\nRUN pip install --break-system-packages --no-cache-dir     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\nCOPY media_release_table_05.xlsx /root/\nCOPY media_release_table_12.xlsx /root/\nCOPY media_service_prices.xlsx /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "media_release_table_05.xlsx",
+          "media_release_table_12.xlsx",
+          "media_service_prices.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Industry-Correlation-Analysis\\econ-broadcasting-advertising-correlation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "economics",
+            "tags": [
+              "economics",
+              "statistics",
+              "data-analysis",
+              "python",
+              "timeseries",
+              "hp-filter",
+              "xlsx",
+              "csv"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-1a548bba0783f5af"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "econ-housing-materials-correlation",
+      "category": "Industry-Correlation-Analysis",
+      "family_id": "Industry-Correlation-Analysis",
+      "description": "# Housing Cycle Alignment Analysis\n\nHousing markets and construction supply chains often exhibit synchronized cyclical behavior. This task examines the relationship between residential renovation activity and building materials distribution.\n\n## Goal\n\nCalculate the Pearson correlation coefficient between the detrended real **residential renovation spending** and the detrended real **building materials dealer shipments** for the years 1995 to 2025 (inclusive).\n\n## Provided Data\n\nThe following datasets are placed in `/root/`:\n\n- `housing_materials_panel.xlsx` – Combined panel dataset:\n  - Sheet `AnnualPanel`: long-format records for both series (annual, with columns `series_label`, `period_label`, `period_kind`, `release_status`, `amount`).\n  - Sheet `Update2025`: monthly updates for 2025 (columns `series_label`, `month`, `release_status`, `amount`).\n- `construction_price_reference.xlsx` – Construction input price index (2025 = 1.0, sheet `AnnualIndices`, column `Construction_Input_Price_2025_Base`).\n\n### Important Notes\n\n1. In `AnnualPanel`, each row corresponds to a single observation. Use only rows where:\n   - `period_kind` equals `\"annual\"`.\n   - `release_status` equals `\"final\"` (ignore `\"prelim\"` or other statuses).\n\n2. In `Update2025`, use only rows where `release_status` equals `\"final\"`. The `month` column contains values like `\"2025-01\"`, `\"2025-02\"`, etc. Annualize the 2025 value by averaging the available monthly amounts.\n\n3. Both series share the same price index for deflation.\n\n## Requirements\n\n1. Extract the two series from `AnnualPanel` and `Update2025` according to the filtering rules above.\n2. Deflate nominal values using the construction input price index.\n3. Apply the Hodrick-Prescott filter:\n   - Take the natural logarithm of the real series before filtering.\n   - Use λ = 100.\n4. Compute the Pearson correlation between the two cyclical components.\n5. Write the result to `/root/answer.txt`:\n   - Output **only** the correlation coefficient as a single number.\n   - Round to 5 decimal places.\n\n## Example Output\n\nIf the correlation is 0.62345, your `answer.txt` should contain:\n\n```\n0.62345\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_script_checks() -> None:\n    local_script = Path(__file__).with_name(\"test_outputs.py\")\n    harness_script = Path(\"/tests/test_outputs.py\")\n    script = harness_script if harness_script.exists() else local_script\n\n    result = subprocess.run(\n        [sys.executable, str(script)],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest suite for Task 3 (dividend, structural): housing-materials correlation.\n\"\"\"\n\nimport os\nimport unittest\n\nEXPECTED = 0.93601\n\n\nclass TestHousingMaterialsCorrelation(unittest.TestCase):\n    def get_answer_path(self):\n        for path in [\"/root/answer.txt\", \"answer.txt\"]:\n            if os.path.exists(path):\n                return path\n        return None\n\n    def test_answer_exists(self):\n        self.assertIsNotNone(self.get_answer_path(), \"Expected answer.txt to exist\")\n\n    def test_answer_format(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        self.assertRegex(content, r\"^-?\\d+\\.?\\d*$\", \"Answer must be a valid number\")\n\n    def test_answer_value(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        value = float(content)\n        self.assertAlmostEqual(value, EXPECTED, delta=0.001)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 4,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y \\\n    curl \\\n    git \\\n    vim \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip install --break-system-packages --no-cache-dir \\\n    pandas==2.2.3 \\\n    numpy==1.26.4 \\\n    openpyxl==3.1.5 \\\n    scipy==1.14.1 \\\n    statsmodels==0.14.4\n\nRUN pip install --break-system-packages --no-cache-dir \\\n    pytest==8.4.1 \\\n    pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY housing_materials_panel.xlsx /root/\nCOPY construction_price_reference.xlsx /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "construction_price_reference.xlsx",
+          "housing_materials_panel.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Industry-Correlation-Analysis\\econ-housing-materials-correlation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "economics",
+            "tags": [
+              "economics",
+              "statistics",
+              "data-analysis",
+              "python",
+              "timeseries",
+              "hp-filter",
+              "xlsx",
+              "panel-data"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-dc9b5d7f68b49cef"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "econ-utilities-telecom-correlation",
+      "category": "Industry-Correlation-Analysis",
+      "family_id": "Industry-Correlation-Analysis",
+      "description": "# Network Services Cycle Alignment\n\nUtility and telecom service revenues are both sensitive to business-cycle conditions, but they are often published in different tabular layouts. This task asks you to compute how closely those two sectors move together after detrending.\n\n## Goal\n\nCalculate the Pearson correlation coefficient between the detrended real **regulated electric utility revenue** and the detrended real **wireline telecom services revenue** for the years 1991 to 2025 (inclusive).\n\n## Provided Data\n\nThe following files are placed in `/root/`:\n\n- `network_matrix_release.xlsx` – Annual wide-format matrix (sheet `OfficialAnnuals`)\n- `network_update_2025.csv` – Monthly 2025 updates\n- `network_service_prices.xlsx` – Shared sector price index (sheet `Indices`)\n\n### Annual Matrix Rule\n\nIn `network_matrix_release.xlsx`, each row is a series and each year from 1991 to 2024 appears as its own column. Use only the row where:\n\n- `series_name` matches the requested series, and\n- `status_flag` equals `official`\n\nIgnore rows where `status_flag` is `memo`.\n\n### Current-Year Rule\n\nIn `network_update_2025.csv`, use only rows where `status_flag` equals `official`. The `period` column contains values like `2025-01`, `2025-02`, and so on. Average the available 2025 monthly amounts to form the annual 2025 value.\n\n### Deflator Rule\n\nUse `Utilities_Telecom_Price_2025_Base` from `network_service_prices.xlsx` to deflate both nominal series.\n\n## Requirements\n\n1. Extract the annual 1991-2024 values from the wide matrix.\n2. Extract and average the available 2025 official monthly values from the CSV file.\n3. Deflate both nominal series using `Utilities_Telecom_Price_2025_Base`.\n4. Apply the Hodrick-Prescott filter:\n   - Take the natural logarithm of the real series before filtering.\n   - Use λ = 100.\n5. Compute the Pearson correlation between the two cyclical components.\n6. Write the result to `/root/answer.txt`:\n   - Output only the correlation coefficient as a single number.\n   - Round to 5 decimal places.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_script_checks() -> None:\n    local_script = Path(__file__).with_name(\"test_outputs.py\")\n    harness_script = Path(\"/tests/test_outputs.py\")\n    script = harness_script if harness_script.exists() else local_script\n\n    result = subprocess.run(\n        [sys.executable, str(script)],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest suite for TestUtilitiesTelecomCorrelation.\n\"\"\"\n\nimport os\nimport unittest\n\nEXPECTED = 0.98727\n\n\nclass TestUtilitiesTelecomCorrelation(unittest.TestCase):\n    def get_answer_path(self):\n        for path in [\"/root/answer.txt\", \"answer.txt\"]:\n            if os.path.exists(path):\n                return path\n        return None\n\n    def test_answer_exists(self):\n        self.assertIsNotNone(self.get_answer_path(), \"Expected answer.txt to exist\")\n\n    def test_answer_format(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        self.assertRegex(content, r\"^-?\\d+\\.?\\d*$\", \"Answer must be a valid number\")\n\n    def test_answer_value(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        value = float(content)\n        self.assertAlmostEqual(value, EXPECTED, delta=0.001)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 5,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     curl     git     vim     && rm -rf /var/lib/apt/lists/*\n\nRUN pip install --break-system-packages --no-cache-dir     pandas==2.2.3     numpy==1.26.4     openpyxl==3.1.5     scipy==1.14.1     statsmodels==0.14.4\n\nRUN pip install --break-system-packages --no-cache-dir     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\nCOPY network_matrix_release.xlsx /root/\nCOPY network_update_2025.csv /root/\nCOPY network_service_prices.xlsx /root/\n",
+        "network_update_2025.csv": "series_name,period,status_flag,amount\nWireline telecom services revenue,2025-03,memo,181.48\nRegulated electric utility revenue,2025-03,official,225.42\nRegulated electric utility revenue,2025-05,official,234.44\nWireline telecom services revenue,2025-06,memo,186.92\nRegulated electric utility revenue,2025-06,memo,234.97\nRegulated electric utility revenue,2025-07,memo,225.85\nWireline telecom services revenue,2025-03,official,183.5\nWireline telecom services revenue,2025-06,official,189.0\nWireline telecom services revenue,2025-01,memo,172.4\nWireline telecom services revenue,2025-04,official,187.17\nRegulated electric utility revenue,2025-03,memo,228.13\nWireline telecom services revenue,2025-08,official,185.34\nRegulated electric utility revenue,2025-05,memo,237.25\nWireline telecom services revenue,2025-08,memo,183.3\nRegulated electric utility revenue,2025-02,official,220.91\nWireline telecom services revenue,2025-04,memo,185.11\nWireline telecom services revenue,2025-05,official,190.84\nRegulated electric utility revenue,2025-08,official,227.67\nWireline telecom services revenue,2025-02,memo,177.85\nRegulated electric utility revenue,2025-01,official,214.15\nRegulated electric utility revenue,2025-08,memo,230.4\nWireline telecom services revenue,2025-01,official,174.32\nRegulated electric utility revenue,2025-04,official,229.93\nRegulated electric utility revenue,2025-02,memo,223.56\nWireline telecom services revenue,2025-05,memo,188.74\nRegulated electric utility revenue,2025-06,official,232.18\nWireline telecom services revenue,2025-07,memo,179.66\nRegulated electric utility revenue,2025-04,memo,232.69\nRegulated electric utility revenue,2025-07,official,223.17\nWireline telecom services revenue,2025-07,official,181.66\nWireline telecom services revenue,2025-02,official,179.83\nRegulated electric utility revenue,2025-01,memo,216.72\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "network_matrix_release.xlsx",
+          "network_service_prices.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Industry-Correlation-Analysis\\econ-utilities-telecom-correlation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "economics",
+            "tags": [
+              "economics",
+              "statistics",
+              "data-analysis",
+              "python",
+              "timeseries",
+              "hp-filter",
+              "xlsx",
+              "csv"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-e0e78b13ce163665"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "econ-logistics-warehousing-correlation",
+      "category": "Industry-Correlation-Analysis",
+      "family_id": "Industry-Correlation-Analysis",
+      "description": "# Logistics and Warehousing Cycle Alignment\n\nFreight intermediation and warehousing investment often move together over the business cycle. This task examines their co-movement using a more realistic data release structure.\n\n## Goal\n\nCalculate the Pearson correlation coefficient between the detrended real **freight brokerage revenue** and the detrended real **warehouse equipment outlays** for the years 1993 to 2025 (inclusive).\n\n## Provided Data\n\nThe following datasets are placed in `/root/`:\n\n1. `logistics_history.xlsx` (sheet `AnnualSeries`):\n   - Long-format historical annual observations.\n   - Columns: `calendar_year`, `BROKER_REV`, `WHSE_EQUIP`, and additional distractor series.\n\n2. `logistics_current_release.xlsx` (sheet `QuarterlyUpdate`):\n   - Quarterly updates for 2025.\n   - Columns: `series_code`, `subperiod`, `version`, `value`.\n   - Use only rows where `version` equals `\"revised\"` (ignore `\"prelim\"`).\n\n3. `series_catalog.csv`:\n   - Mapping file that links requested series names to codes.\n   - Columns: `requested_series`, `history_sheet`, `history_code`, `current_sheet`, `current_code`, `deflator_column`.\n\n4. `logistics_price_book.xlsx` (sheet `Indices`):\n   - Price indices for deflation.\n   - Columns: `Year`, `Transport_Services_Price_2025_Base`, `Warehouse_Equipment_Price_2025_Base`.\n\n### Important Notes\n\n1. Use `series_catalog.csv` to determine which columns and codes correspond to each requested series.\n2. For historical data (years before 2025), extract values from `logistics_history.xlsx` using the appropriate `history_code` column.\n3. For 2025, extract values from `logistics_current_release.xlsx` using the appropriate `current_code` and filtering for `version == \"revised\"`. Annualize by averaging the available quarterly values.\n4. Each series has its own price index column for deflation (specified in `deflator_column`).\n\n## Requirements\n\n1. Use the catalog to locate the correct codes and deflator columns for each series.\n2. Extract historical annual values (1993–2024) from the history workbook.\n3. Extract and annualize 2025 values from the current release workbook (revised only).\n4. Deflate each nominal series using its corresponding price index.\n5. Apply the Hodrick-Prescott filter:\n   - Take the natural logarithm of the real series before filtering.\n   - Use λ = 100.\n6. Compute the Pearson correlation between the two cyclical components.\n7. Write the result to `/root/answer.txt`:\n   - Output **only** the correlation coefficient as a single number.\n   - Round to 5 decimal places.\n\n## Example Output\n\nIf the correlation is -0.31245, your `answer.txt` should contain:\n\n```\n-0.31245\n```\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_script_checks() -> None:\n    local_script = Path(__file__).with_name(\"test_outputs.py\")\n    harness_script = Path(\"/tests/test_outputs.py\")\n    script = harness_script if harness_script.exists() else local_script\n\n    result = subprocess.run(\n        [sys.executable, str(script)],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest suite for Task 4 (dividend, adversarial-but-derivable): logistics-warehousing correlation.\n\"\"\"\n\nimport os\nimport unittest\n\nEXPECTED = 0.95269\n\n\nclass TestLogisticsWarehousingCorrelation(unittest.TestCase):\n    def get_answer_path(self):\n        for path in [\"/root/answer.txt\", \"answer.txt\"]:\n            if os.path.exists(path):\n                return path\n        return None\n\n    def test_answer_exists(self):\n        self.assertIsNotNone(self.get_answer_path(), \"Expected answer.txt to exist\")\n\n    def test_answer_format(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        self.assertRegex(content, r\"^-?\\d+\\.?\\d*$\", \"Answer must be a valid number\")\n\n    def test_answer_value(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        value = float(content)\n        self.assertAlmostEqual(value, EXPECTED, delta=0.001)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 6,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y \\\n    curl \\\n    git \\\n    vim \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN pip install --break-system-packages --no-cache-dir \\\n    pandas==2.2.3 \\\n    numpy==1.26.4 \\\n    openpyxl==3.1.5 \\\n    scipy==1.14.1 \\\n    statsmodels==0.14.4\n\nRUN pip install --break-system-packages --no-cache-dir \\\n    pytest==8.4.1 \\\n    pytest-json-ctrf==0.3.5\n\nWORKDIR /root\n\nCOPY logistics_history.xlsx /root/\nCOPY logistics_current_release.xlsx /root/\nCOPY series_catalog.csv /root/\nCOPY logistics_price_book.xlsx /root/\n",
+        "series_catalog.csv": "requested_series,history_sheet,history_code,current_sheet,current_code,deflator_column\nFreight brokerage revenue,AnnualSeries,BROKER_REV,QuarterlyUpdate,BR_REV_25,Transport_Services_Price_2025_Base\nWarehouse equipment outlays,AnnualSeries,WHSE_EQUIP,QuarterlyUpdate,WH_EQP_25,Warehouse_Equipment_Price_2025_Base\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "logistics_current_release.xlsx",
+          "logistics_history.xlsx",
+          "logistics_price_book.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Industry-Correlation-Analysis\\econ-logistics-warehousing-correlation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "economics",
+            "tags": [
+              "economics",
+              "statistics",
+              "data-analysis",
+              "python",
+              "timeseries",
+              "hp-filter",
+              "xlsx",
+              "csv",
+              "catalog-mapping"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-95fa87d2d13cc6a1"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "econ-wholesale-packaging-correlation",
+      "category": "Industry-Correlation-Analysis",
+      "family_id": "Industry-Correlation-Analysis",
+      "description": "# Distribution and Packaging Cycle Comparison\n\nWholesale distribution and packaging output often move together, but the source release for this task includes aliases and duplicate official rows. Your job is to reconstruct the correct annual series before computing the cyclical correlation.\n\n## Goal\n\nCalculate the Pearson correlation coefficient between the detrended real **merchant wholesale turnover** and the detrended real **packaging converters shipments** for the years 1990 to 2025 (inclusive).\n\n## Provided Data\n\nThe following files are placed in `/root/`:\n\n- `distribution_packaging_release.xlsx` – Annual observations (sheet `AnnualRows`)\n- `distribution_packaging_2025.xlsx` – Partial 2025 quarterly updates (sheet `CurrentPartials`)\n- `series_aliases.csv` – Alias mapping for the requested series\n- `distribution_packaging_prices.xlsx` – Shared price index (sheet `AnnualIndex`)\n\n## Alias Rule\n\nThe annual and current-period files may refer to the requested series using alternate aliases. Use `series_aliases.csv` to determine which aliases should be treated as valid matches for each requested series.\n\n## Deduplication Rule\n\nIn both release files:\n\n1. Keep only rows where `record_type` equals `official`.\n2. If multiple official rows remain for the same year or subperiod, keep the row with the smallest numeric value in `priority`.\n\n## Annualization Rule\n\nIn `distribution_packaging_2025.xlsx`, the `subperiod` column contains partial 2025 quarters. After alias matching and deduplication, average the available quarter values to form the annual 2025 observation.\n\n## Deflator Rule\n\nUse `Distribution_Packaging_Price_2025_Base` to deflate both nominal series.\n\n## Requirements\n\n1. Use the alias file to match the correct rows for each requested series.\n2. Build the annual 1990-2024 history from the annual release file using the deduplication rule.\n3. Build the 2025 value from the quarterly update file using the same deduplication rule.\n4. Deflate both nominal series.\n5. Apply the Hodrick-Prescott filter:\n   - Take the natural logarithm of the real series before filtering.\n   - Use λ = 100.\n6. Compute the Pearson correlation between the two cyclical components.\n7. Write the result to `/root/answer.txt`:\n   - Output only the correlation coefficient as a single number.\n   - Round to 5 decimal places.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_script_checks() -> None:\n    local_script = Path(__file__).with_name(\"test_outputs.py\")\n    harness_script = Path(\"/tests/test_outputs.py\")\n    script = harness_script if harness_script.exists() else local_script\n\n    result = subprocess.run(\n        [sys.executable, str(script)],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest suite for TestWholesalePackagingCorrelation.\n\"\"\"\n\nimport os\nimport unittest\n\nEXPECTED = 0.97613\n\n\nclass TestWholesalePackagingCorrelation(unittest.TestCase):\n    def get_answer_path(self):\n        for path in [\"/root/answer.txt\", \"answer.txt\"]:\n            if os.path.exists(path):\n                return path\n        return None\n\n    def test_answer_exists(self):\n        self.assertIsNotNone(self.get_answer_path(), \"Expected answer.txt to exist\")\n\n    def test_answer_format(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        self.assertRegex(content, r\"^-?\\d+\\.?\\d*$\", \"Answer must be a valid number\")\n\n    def test_answer_value(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        value = float(content)\n        self.assertAlmostEqual(value, EXPECTED, delta=0.001)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 7,
+      "dependencies": [],
+      "files": {
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     curl     git     vim     && rm -rf /var/lib/apt/lists/*\n\nRUN pip install --break-system-packages --no-cache-dir     pandas==2.2.3     numpy==1.26.4     openpyxl==3.1.5     scipy==1.14.1     statsmodels==0.14.4\n\nRUN pip install --break-system-packages --no-cache-dir     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\nCOPY distribution_packaging_release.xlsx /root/\nCOPY distribution_packaging_2025.xlsx /root/\nCOPY series_aliases.csv /root/\nCOPY distribution_packaging_prices.xlsx /root/\n",
+        "series_aliases.csv": "requested_series,accepted_alias\nMerchant wholesale turnover,Merchant wholesale turnover\nMerchant wholesale turnover,merchant-wholesale-turnover\nMerchant wholesale turnover,merchant wholesale net turnover\nPackaging converters shipments,Packaging converters shipments\nPackaging converters shipments,packaging-plants shipments\nPackaging converters shipments,packaging converters domestic shipments\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "distribution_packaging_2025.xlsx",
+          "distribution_packaging_prices.xlsx",
+          "distribution_packaging_release.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Industry-Correlation-Analysis\\econ-wholesale-packaging-correlation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "economics",
+            "tags": [
+              "economics",
+              "statistics",
+              "data-analysis",
+              "python",
+              "timeseries",
+              "hp-filter",
+              "xlsx",
+              "csv"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-3e4c06b6560f944d"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    },
+    {
+      "task_id": "econ-coldchain-lastmile-correlation",
+      "category": "Industry-Correlation-Analysis",
+      "family_id": "Industry-Correlation-Analysis",
+      "description": "# Cold-Chain and Last-Mile Cycle Correlation\n\nThis task combines a historical matrix, two overlapping current-period update files, a selector workbook, and two different deflators. Your goal is to reconstruct two macro-sensitive logistics series and measure their cyclical co-movement.\n\n## Goal\n\nCalculate the Pearson correlation coefficient between the detrended real **temperature-controlled storage fees** and the detrended real **urban last-mile parcel charges** for the years 1994 to 2025 (inclusive).\n\n## Provided Data\n\nThe following files are placed in `/root/`:\n\n- `coldchain_archive.xlsx` – Historical annual matrix (sheet `HistoryMatrix`)\n- `coldchain_updates_a.csv` – Current 2025 monthly updates from source A\n- `coldchain_updates_b.csv` – Current 2025 monthly updates from source B\n- `coldchain_update_selector.xlsx` – Month-level selection rules (sheet `UseThese`)\n- `coldchain_series_register.csv` – Series register containing codes, historical status, and deflator columns\n- `coldchain_price_book.xlsx` – Price indices (sheet `Indices`)\n\n## Register Rule\n\nUse `coldchain_series_register.csv` to determine, for each requested series:\n\n- which historical code to read from `coldchain_archive.xlsx`\n- which `status_bucket` is valid in the historical matrix\n- which current-period code to use in the update files\n- which deflator column to use in `coldchain_price_book.xlsx`\n\n## Historical Rule\n\nIn `coldchain_archive.xlsx`, use only the row where both of the following match the register entry:\n\n- `series_code`\n- `status_bucket`\n\nThe annual year columns in the matrix cover 1994 through 2024.\n\n## Current-Year Rule\n\nThe 2025 monthly values are split across `coldchain_updates_a.csv` and `coldchain_updates_b.csv`. Use `coldchain_update_selector.xlsx` to choose the correct source file and `version` for each month and each series.\n\nFor each selected row:\n\n- if the selected record exists and has a numeric `amount`, keep it\n- if the selected record is blank or missing, ignore that month\n\nAverage the remaining selected monthly amounts to form the annual 2025 value.\n\n## Deflator Rule\n\nUse the deflator column specified in the register for each series. The two requested series do not share the same deflator.\n\n## Requirements\n\n1. Use the register to identify the correct historical code, historical status, current code, and deflator column for each series.\n2. Extract the annual 1994-2024 history from the matrix.\n3. Use the selector workbook to pick the correct monthly 2025 observations from the two update files.\n4. Average the valid selected monthly observations to form the 2025 value for each series.\n5. Deflate each nominal series using its own deflator column.\n6. Apply the Hodrick-Prescott filter:\n   - Take the natural logarithm of the real series before filtering.\n   - Use λ = 100.\n7. Compute the Pearson correlation between the two cyclical components.\n8. Write the result to `/root/answer.txt`:\n   - Output only the correlation coefficient as a single number.\n   - Round to 5 decimal places.\n",
+      "required_skills": [],
+      "verification": {
+        "type": "skillflow_script",
+        "test_code": null,
+        "entry_point": null,
+        "test_cases": [],
+        "expected_output": null,
+        "test_script": "# --- test_output.py ---\nfrom __future__ import annotations\n\nimport subprocess\nimport sys\nfrom pathlib import Path\n\n\ndef test_legacy_script_checks() -> None:\n    local_script = Path(__file__).with_name(\"test_outputs.py\")\n    harness_script = Path(\"/tests/test_outputs.py\")\n    script = harness_script if harness_script.exists() else local_script\n\n    result = subprocess.run(\n        [sys.executable, str(script)],\n        capture_output=True,\n        text=True,\n        check=False,\n    )\n    if result.returncode != 0:\n        raise AssertionError((result.stdout or \"\") + \"\\n\" + (result.stderr or \"\"))\n\n\n\n# --- test_outputs.py ---\n\"\"\"\nTest suite for TestColdchainLastmileCorrelation.\n\"\"\"\n\nimport os\nimport unittest\n\nEXPECTED = 0.92431\n\n\nclass TestColdchainLastmileCorrelation(unittest.TestCase):\n    def get_answer_path(self):\n        for path in [\"/root/answer.txt\", \"answer.txt\"]:\n            if os.path.exists(path):\n                return path\n        return None\n\n    def test_answer_exists(self):\n        self.assertIsNotNone(self.get_answer_path(), \"Expected answer.txt to exist\")\n\n    def test_answer_format(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        self.assertRegex(content, r\"^-?\\d+\\.?\\d*$\", \"Answer must be a valid number\")\n\n    def test_answer_value(self):\n        path = self.get_answer_path()\n        if path is None:\n            self.skipTest(\"answer.txt missing\")\n        with open(path, \"r\", encoding=\"utf-8\") as f:\n            content = f.read().strip()\n        value = float(content)\n        self.assertAlmostEqual(value, EXPECTED, delta=0.001)\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)\n",
+        "docker_image": null,
+        "timeout_seconds": 900
+      },
+      "difficulty": 8,
+      "dependencies": [],
+      "files": {
+        "coldchain_series_register.csv": "requested_series,history_code,history_status,current_code,deflator_column\nTemperature-controlled storage fees,CC_STOR,benchmark,CC_STOR_25,Cold_Storage_Price_2025_Base\nUrban last-mile parcel charges,LM_PARCEL,benchmark,LM_PARCEL_25,Last_Mile_Services_Price_2025_Base\n",
+        "coldchain_updates_a.csv": "series_code,month,version,amount\nLM_PARCEL_25,2025-02,draft-release,139.77\nLM_PARCEL_25,2025-08,draft-release,146.9\nCC_STOR_25,2025-07,draft-release,156.6\nLM_PARCEL_25,2025-02,city-release,137.43\nCC_STOR_25,2025-05,draft-release,161.3\nLM_PARCEL_25,2025-06,city-release,147.59\nLM_PARCEL_25,2025-07,draft-release,141.19\nCC_STOR_25,2025-08,city-release,158.32\nCC_STOR_25,2025-04,city-release,156.78\nLM_PARCEL_25,2025-08,city-release,144.44\nLM_PARCEL_25,2025-07,city-release,\nCC_STOR_25,2025-06,city-release,162.98\nLM_PARCEL_25,2025-03,city-release,141.91\nLM_PARCEL_25,2025-01,city-release,134.82\nCC_STOR_25,2025-03,city-release,151.99\nCC_STOR_25,2025-02,city-release,150.56\nLM_PARCEL_25,2025-05,draft-release,145.46\nLM_PARCEL_25,2025-04,city-release,143.33\nCC_STOR_25,2025-07,city-release,153.53\nCC_STOR_25,2025-05,city-release,158.14\nCC_STOR_25,2025-01,city-release,144.32\nCC_STOR_25,2025-01,draft-release,147.21\nCC_STOR_25,2025-03,draft-release,155.03\nLM_PARCEL_25,2025-05,city-release,143.03\n",
+        "coldchain_updates_b.csv": "series_code,month,version,amount\nLM_PARCEL_25,2025-06,central-release,145.84\nCC_STOR_25,2025-05,central-release,157.03\nLM_PARCEL_25,2025-04,central-release,141.63\nCC_STOR_25,2025-03,central-release,150.93\nLM_PARCEL_25,2025-08,central-release,143.14\nLM_PARCEL_25,2025-06,draft-release,143.65\nLM_PARCEL_25,2025-02,central-release,136.19\nLM_PARCEL_25,2025-01,central-release,133.22\nCC_STOR_25,2025-02,central-release,148.92\nCC_STOR_25,2025-02,draft-release,146.54\nCC_STOR_25,2025-01,central-release,143.31\nCC_STOR_25,2025-06,draft-release,158.63\nLM_PARCEL_25,2025-03,central-release,140.23\nLM_PARCEL_25,2025-05,central-release,141.74\nCC_STOR_25,2025-08,draft-release,154.09\nCC_STOR_25,2025-04,draft-release,152.59\nCC_STOR_25,2025-07,central-release,152.46\nLM_PARCEL_25,2025-04,draft-release,139.51\nCC_STOR_25,2025-06,central-release,161.21\nCC_STOR_25,2025-04,central-release,155.07\nLM_PARCEL_25,2025-01,draft-release,131.22\nCC_STOR_25,2025-08,central-release,156.6\nLM_PARCEL_25,2025-03,draft-release,138.13\nLM_PARCEL_25,2025-07,central-release,137.58\n",
+        "Dockerfile": "FROM skillevlove/harbor-cli-openhands:ubuntu24.04\n\nENV DEBIAN_FRONTEND=noninteractive\n\nRUN apt-get update && apt-get install -y     curl     git     vim     && rm -rf /var/lib/apt/lists/*\n\nRUN pip install --break-system-packages --no-cache-dir     pandas==2.2.3     numpy==1.26.4     openpyxl==3.1.5     scipy==1.14.1     statsmodels==0.14.4\n\nRUN pip install --break-system-packages --no-cache-dir     pytest==8.4.1     pytest-json-ctrf==0.3.5\n\nWORKDIR /root\nCOPY coldchain_archive.xlsx /root/\nCOPY coldchain_updates_a.csv /root/\nCOPY coldchain_updates_b.csv /root/\nCOPY coldchain_update_selector.xlsx /root/\nCOPY coldchain_series_register.csv /root/\nCOPY coldchain_price_book.xlsx /root/\n"
+      },
+      "metadata": {
+        "source": "skillflow_real",
+        "binary_files": [
+          "coldchain_archive.xlsx",
+          "coldchain_price_book.xlsx",
+          "coldchain_update_selector.xlsx"
+        ],
+        "source_environment_dir": "D:\\pythonlesson\\考核题目\\FederatedSkill-Reproduction\\benchmark\\cache\\SkillFlow-Task\\test_tasks\\Industry-Correlation-Analysis\\econ-coldchain-lastmile-correlation\\environment",
+        "raw_toml": {
+          "version": "1.0",
+          "metadata": {
+            "author_name": "CatPaw",
+            "author_email": "catpaw@example.com",
+            "difficulty": "medium",
+            "category": "economics",
+            "tags": [
+              "economics",
+              "statistics",
+              "data-analysis",
+              "python",
+              "timeseries",
+              "hp-filter",
+              "xlsx",
+              "csv"
+            ]
+          },
+          "verifier": {
+            "timeout_sec": 900.0
+          },
+          "agent": {
+            "timeout_sec": 1800.0
+          },
+          "environment": {
+            "build_timeout_sec": 600.0,
+            "cpus": 1,
+            "memory_mb": 4096,
+            "storage_mb": 10240,
+            "docker_image": "harbor-prebuilt:task-b4a692fd7b780c0b"
+          }
+        },
+        "agent_timeout_seconds": 1800.0
+      }
+    }
+  ]
+}

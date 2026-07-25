@@ -1,0 +1,68 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Ablation A1: No Capability Matrix
+#
+# 论文 Section 6 Ablation Study (Table 4)：
+#   A1: 去掉能力矩阵 C^t — Stage1 规划器不维护 per-worker coverage 状态。
+#   所有 worker 每轮无差别地向 server 提交 patch，
+#   server 用随机策略（random merge）决定吸收哪些 patch。
+#
+# 结论：移除能力矩阵导致 SR 降低（论文 Table 4 第2行），
+# 说明 capability-guided routing 对聚焦演化至关重要。
+# ──────────────────────────────────────────────────────────────────────────────
+
+setting_name: "Ablation_A1_No_Capability_Matrix"
+description: "A1 ablation: disable capability matrix; use random patch merge policy"
+federated: true
+
+rounds: 8
+seed: 42
+sampler: "random"
+output_dir: "results/ablation_a1_no_cap_matrix"
+
+# 消融：禁用能力矩阵（Stage1 规划器退化为无差别的随机合并策略）
+ablation:
+  disable_capability_matrix: true    # Stage1 跳过 per-worker coverage 状态追踪
+  merge_policy: "random"             # random 选择接受哪些 peer patch
+  # 对比基线: setting_full_hetero.yaml (Full Hetero FedSkill)
+
+server:
+  backbone_model: "glm-5"
+  model_provider: "dashscope"
+  api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+  api_key_env: "DASHSCOPE_KEY"
+  merger_max_tokens: 16384
+
+merger_mode: "unshared"
+isolated_worker_skills: true
+sync_schedule: "every_task"
+
+patcher:
+  temperature: 0.2
+
+workers:
+  - client_id: "u0"
+    backbone_model: "qwen3.6-plus"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "DASHSCOPE_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u1"
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/apps/anthropic"
+    api_key_env: "DASHSCOPE_KEY"
+    max_context_tokens: 131072
+    is_moonshot: false
+
+  - client_id: "u2"
+    backbone_model: "kimi-k2.5"
+    agent_harness: "claude-code"
+    model_provider: "moonshot"
+    api_base: "https://api.moonshot.ai/anthropic"
+    api_key_env: "MOONSHOT_KEY"
+    max_context_tokens: 131072
+    is_moonshot: true

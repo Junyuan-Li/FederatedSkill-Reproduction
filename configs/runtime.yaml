@@ -1,0 +1,16 @@
+sanity:
+  timeout: 120
+  max_turns: 5
+
+# [Runtime Protocol Alignment Issue1] timeout 由 600 → 1800，对齐官方
+# SkillFlow benchmark 数据集 task.toml `[agent] timeout_sec=1800.0`
+# （抽样 Compensation-Scenario-Modeling / Cross-Format-Data-Reconciliation /
+# DMAIC-Quality-Analysis 三个候选 family 一致；官方 paper_logs 真实运行记录
+# `agent_timeout_multiplier=1.0` 证实原样使用，未做缩短）。原值 600 是与
+# benchmark 数据无关的仓库工程常量，只有官方值的 1/3——很可能是此前两次
+# Phase1 sanity 均在 600.5s 精确超时的根因。此值仅作为逐 task 覆盖值缺失时
+# 的 fallback（见 harness/cli_harness_base.py 读取 Task.metadata 里的
+# agent_timeout_seconds 字段），详见 timeout_policy_report.md。
+real_experiment:
+  timeout: 1800
+  max_turns: null

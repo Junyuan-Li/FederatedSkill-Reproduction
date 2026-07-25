@@ -1,0 +1,117 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Setting 4: Full Heterogeneous Federated Learning（最强异构，论文核心场景）
+#
+# 论文 Section 5.1 / Table 1 "Full-Hetero (Ours)" 列：
+#   每个 client 拥有不同的 backbone AND 不同的 agent harness。
+#   这是论文的核心贡献场景，也是技术挑战最大的设置。
+#
+# Client 组合（来自论文 Table 3）：
+#   u0: Qwen3.6-Plus  + Qwen Coder（终端驱动）
+#   u1: GLM-5         + Claude Code（对话驱动）
+#   u2: Kimi K2.5     + Kimi CLI（命令行工具调用）
+#
+# 服务端：GLM-5 + Claude Code（最强大的文字推理组合）
+#
+# 论文 Section 4.2.2（Stage2 Harness-Aware Personalization）：
+#   "We identify three primary harness styles: claude-code, qwen-code, kimi-cli.
+#    The evolution agent adjusts its generated skill code style based on the
+#    target client's harness via style hint injection."
+# ──────────────────────────────────────────────────────────────────────────────
+
+setting_name: "Full_Hetero_Federated"
+description: "Setting 4: Full heterogeneity — different backbone AND harness per client"
+federated: true
+
+rounds: 8
+seed: 42
+max_retry: 2  # 失败 attempt 回滚 library；不改变算法状态
+# Phase1 修正（同 setting_hetero_backbone.yaml 的审计结论）：论文 Table 1
+# "Full Hetero" 一节同样对每个 family 行列出 3 个 backbone+harness 组合的
+# 成功率，三个 client 应跑同一批 family，而不是按 task_categories 拆分成
+# 互不相交的子集。改用 family_curriculum + loop_over_families；
+# task_categories 字段保留作为历史记录，但不再被 _build_sampler() 读取/使用。
+sampler: "family_curriculum"
+loop_over_families: true
+rounds_per_family_mode: "family_length"  # 默认值，显式声明不依赖隐式默认
+# TASK1 修正（P0）：只跑论文定义的 20 个官方 SkillFlow family，排除
+# benchmark/families/ 下 5 个本项目自建的 legacy family（不删除磁盘文件）。
+paper_benchmark_only: true
+output_dir: "results/setting4_full_hetero"
+
+server:
+  backbone_model: "glm-5"                              # official merger_model
+  model_provider: "dashscope"
+  api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  api_key_env: "GLM_DASHSCOPE_API_KEY"                # Provider Key Isolation Fix: GLM 专属变量
+  merger_max_tokens: 16384
+  family_name: "full_hetero_family"
+
+merger_mode: "unshared"
+isolated_worker_skills: true
+sync_schedule: "every_task"
+
+patcher:
+  temperature: 0.2           # kimi/moonshot auto-resolved to 1.0 per-worker
+
+# task_categories：与 setting_hetero_backbone.yaml 保持同一套主题分组，
+# 便于横向对比 Setting3→Setting4（新增 harness 异构变量，任务分布不变）。
+workers:
+  - client_id: "u0"
+    # qwen3.6-plus + qwen-code (OpenAI-compatible endpoint, not Anthropic)
+    # Matches official configs/4_fed_hetero_mixed_cli.local.yaml u0 block
+    backbone_model: "qwen3.6-plus"
+    agent_harness: "qwen-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"  # OpenAI-compat for qwen-code
+    api_key_env: "QWEN_DASHSCOPE_API_KEY"    # Provider Key Isolation Fix: Qwen 专属变量
+    max_context_tokens: 131072
+    is_moonshot: false
+    task_categories:                # 金融/薪酬类 family（9 个）
+      - "Compensation-Scenario-Modeling"
+      - "Financial-Statement-Rolling"
+      - "financial_analysis"
+      - "SEC-13F-Financial-Analysis"
+      - "Weighted-Risk-Assessment"
+      - "Healthcare-Cost-Benefit-Analysis"
+      - "Industry-Correlation-Analysis"
+      - "Sales-Pivot-Analysis"
+      - "Inventory-&-Finance-Integration"
+
+  - client_id: "u1"
+    # Python patcher uses OpenAI-compatible; ClaudeCodeHarness converts this
+    # profile endpoint to /apps/anthropic only inside the CLI subprocess env.
+    backbone_model: "glm-5"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "GLM_DASHSCOPE_API_KEY"     # Provider Key Isolation Fix: GLM 专属变量
+    max_context_tokens: 131072
+    is_moonshot: false
+    task_categories:                # 文档/报告类 family（8 个）
+      - "document_processing"
+      - "report_generation"
+      - "HWPX-Document-Automation"
+      - "PPT-Formatting-Optimization"
+      - "OCR-Data-Extraction"
+      - "Document-Fraud-Detection"
+      - "Cross-Format-Data-Reconciliation"
+      - "Medical-Data-Standardization"
+
+  - client_id: "u2"
+    # kimi-k2.5 + kimi-cli, native Moonshot OpenAI-compatible endpoint
+    backbone_model: "kimi-k2.5"
+    agent_harness: "kimi-cli"
+    model_provider: "moonshot"
+    api_base: "https://api.moonshot.ai/v1"
+    api_key_env: "MOONSHOT_API_KEY"
+    max_context_tokens: 131072
+    is_moonshot: true                                  # forces temperature >= 1.0
+    task_categories:
+      - "data_cleaning"
+      - "data_transformation"
+      - "Distribution-Center-Auditing"
+      - "DMAIC-Quality-Analysis"
+      - "Embedded-Data-Repair"
+      - "Operational-Recovery-Planning"
+      - "Production-Capacity-Planning"
+      - "Supply-Chain-Replenishment"

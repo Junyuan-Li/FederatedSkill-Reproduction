@@ -1,0 +1,522 @@
+[
+  {
+    "task_id": "python_json_filter_001",
+    "category": "data_processing",
+    "description": "Write a Python function named `filter_adults` that takes a list of dicts, each with 'name' (str) and 'age' (int) keys. Return a new list containing only dicts where age > 18. Do not import anything.",
+    "required_skills": ["list_filter", "dict_access"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "filter_adults",
+      "test_cases": [
+        {
+          "inputs": [[{"name": "Alice", "age": 25}, {"name": "Bob", "age": 16}, {"name": "Carol", "age": 18}]],
+          "expected": [{"name": "Alice", "age": 25}],
+          "description": "基础过滤：只保留 age > 18"
+        },
+        {
+          "inputs": [[]],
+          "expected": [],
+          "description": "空列表返回空列表"
+        },
+        {
+          "inputs": [[{"name": "X", "age": 1}]],
+          "expected": [],
+          "description": "全不满足"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 1,
+    "metadata": {"source": "custom_benchmark_v1"}
+  },
+  {
+    "task_id": "python_str_reverse_002",
+    "category": "text_analysis",
+    "description": "Write a Python function named `reverse_words` that takes a sentence string and returns a new string with the words in reversed order. Words are separated by single spaces. Do not import anything.",
+    "required_skills": ["string_split", "list_reverse"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "reverse_words",
+      "test_cases": [
+        {
+          "inputs": ["hello world foo"],
+          "expected": "foo world hello",
+          "description": "基础反转"
+        },
+        {
+          "inputs": ["single"],
+          "expected": "single",
+          "description": "单词不变"
+        },
+        {
+          "inputs": ["a b c d"],
+          "expected": "d c b a",
+          "description": "四个单词"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 1,
+    "metadata": {}
+  },
+  {
+    "task_id": "python_csv_parse_003",
+    "category": "data_processing",
+    "description": "Write a Python function named `parse_csv_rows` that takes a multi-line CSV string (with header on first line) and returns a list of dicts mapping column names to values. Use Python's built-in csv module.",
+    "required_skills": ["csv_parse", "dict_mapping"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "parse_csv_rows",
+      "test_cases": [
+        {
+          "inputs": ["name,age\nAlice,30\nBob,25"],
+          "expected": [{"name": "Alice", "age": "30"}, {"name": "Bob", "age": "25"}],
+          "description": "基础 CSV 解析"
+        },
+        {
+          "inputs": ["x\n1\n2"],
+          "expected": [{"x": "1"}, {"x": "2"}],
+          "description": "单列"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {}
+  },
+  {
+    "task_id": "python_flatten_list_004",
+    "category": "data_processing",
+    "description": "Write a Python function named `flatten_list` that takes a list of lists and returns a single flat list containing all elements in order. Do not import anything.",
+    "required_skills": ["list_comprehension", "nested_list"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "flatten_list",
+      "test_cases": [
+        {
+          "inputs": [[[1, 2], [3, 4], [5]]],
+          "expected": [1, 2, 3, 4, 5],
+          "description": "基础展平"
+        },
+        {
+          "inputs": [[[]]],
+          "expected": [],
+          "description": "含空子列表"
+        },
+        {
+          "inputs": [[["a"], ["b", "c"]]],
+          "expected": ["a", "b", "c"],
+          "description": "字符串展平"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 1,
+    "metadata": {}
+  },
+  {
+    "task_id": "python_word_count_005",
+    "category": "text_analysis",
+    "description": "Write a Python function named `word_frequency` that takes a string and returns a dict mapping each unique word (lowercased, split by spaces) to its frequency count. Ignore empty strings.",
+    "required_skills": ["string_split", "dict_counter"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "word_frequency",
+      "test_cases": [
+        {
+          "inputs": ["the cat sat on the mat"],
+          "expected": {"the": 2, "cat": 1, "sat": 1, "on": 1, "mat": 1},
+          "description": "基础词频统计"
+        },
+        {
+          "inputs": ["Hello hello HELLO"],
+          "expected": {"hello": 3},
+          "description": "大小写归一"
+        },
+        {
+          "inputs": [""],
+          "expected": {},
+          "description": "空字符串"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {}
+  },
+  {
+    "task_id": "python_json_merge_006",
+    "category": "data_processing",
+    "description": "Write a Python function named `merge_dicts` that takes two dicts and returns a new dict containing all keys from both. If a key exists in both, use the value from the second dict (override). Do not import anything.",
+    "required_skills": ["dict_merge", "dict_update"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "merge_dicts",
+      "test_cases": [
+        {
+          "inputs": [{"a": 1, "b": 2}, {"b": 3, "c": 4}],
+          "expected": {"a": 1, "b": 3, "c": 4},
+          "description": "冲突键取后者"
+        },
+        {
+          "inputs": [{}, {"x": 1}],
+          "expected": {"x": 1},
+          "description": "第一个为空"
+        },
+        {
+          "inputs": [{"a": 1}, {}],
+          "expected": {"a": 1},
+          "description": "第二个为空"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 1,
+    "metadata": {}
+  },
+  {
+    "task_id": "python_group_by_007",
+    "category": "data_processing",
+    "description": "Write a Python function named `group_by_key` that takes a list of dicts and a key name, and returns a dict mapping each unique value of that key to a list of dicts with that value. Do not import anything.",
+    "required_skills": ["dict_groupby", "list_partition"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "group_by_key",
+      "test_cases": [
+        {
+          "inputs": [[{"dept": "eng", "name": "Alice"}, {"dept": "hr", "name": "Bob"}, {"dept": "eng", "name": "Carol"}], "dept"],
+          "expected": {"eng": [{"dept": "eng", "name": "Alice"}, {"dept": "eng", "name": "Carol"}], "hr": [{"dept": "hr", "name": "Bob"}]},
+          "description": "按 dept 分组"
+        },
+        {
+          "inputs": [[], "key"],
+          "expected": {},
+          "description": "空列表"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {}
+  },
+  {
+    "task_id": "python_pipeline_008",
+    "category": "workflow",
+    "description": "Write a Python function named `process_records` that takes a list of dicts with 'value' (int) and 'tag' (str) keys, filters out records where value <= 0, doubles each remaining value, and returns a list of dicts sorted by value descending. Do not import anything.",
+    "required_skills": ["list_filter", "list_transform", "list_sort"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "process_records",
+      "test_cases": [
+        {
+          "inputs": [[{"value": 3, "tag": "a"}, {"value": -1, "tag": "b"}, {"value": 1, "tag": "c"}]],
+          "expected": [{"value": 6, "tag": "a"}, {"value": 2, "tag": "c"}],
+          "description": "过滤+翻倍+排序"
+        },
+        {
+          "inputs": [[{"value": 0, "tag": "z"}]],
+          "expected": [],
+          "description": "value=0 被过滤"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 3,
+    "metadata": {}
+  },
+  {
+    "task_id": "python_regex_extract_009",
+    "category": "coding",
+    "description": "Write a Python function named `extract_emails` that takes a string and returns a list of all email addresses found (pattern: word chars + @ + word chars + . + 2-6 letter TLD). Use the `re` module.",
+    "required_skills": ["regex", "string_search"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "extract_emails",
+      "test_cases": [
+        {
+          "inputs": ["Contact alice@example.com or bob@test.org for help."],
+          "expected": ["alice@example.com", "bob@test.org"],
+          "description": "基础邮件提取"
+        },
+        {
+          "inputs": ["no emails here!"],
+          "expected": [],
+          "description": "无邮件"
+        },
+        {
+          "inputs": ["a@b.co and x.y@domain.info"],
+          "expected": ["a@b.co", "x.y@domain.info"],
+          "description": "短域名和点号用户名"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {"source": "coding_regex"}
+  },
+  {
+    "task_id": "python_prime_check_010",
+    "category": "coding",
+    "description": "Write a Python function named `is_prime` that takes a positive integer n and returns True if n is prime, False otherwise. Handle n < 2 correctly.",
+    "required_skills": ["algorithm", "number_theory"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "is_prime",
+      "test_cases": [
+        {"inputs": [2], "expected": true, "description": "2 是素数"},
+        {"inputs": [1], "expected": false, "description": "1 不是素数"},
+        {"inputs": [17], "expected": true, "description": "17 是素数"},
+        {"inputs": [15], "expected": false, "description": "15 = 3×5 不是素数"},
+        {"inputs": [0], "expected": false, "description": "0 不是素数"}
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 1,
+    "metadata": {"source": "coding_algorithm"}
+  },
+  {
+    "task_id": "python_fibonacci_011",
+    "category": "coding",
+    "description": "Write a Python function named `fibonacci` that takes a non-negative integer n and returns the n-th Fibonacci number (0-indexed: fib(0)=0, fib(1)=1). Do not import anything.",
+    "required_skills": ["recursion_or_iteration", "sequence"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "fibonacci",
+      "test_cases": [
+        {"inputs": [0], "expected": 0, "description": "fib(0)=0"},
+        {"inputs": [1], "expected": 1, "description": "fib(1)=1"},
+        {"inputs": [6], "expected": 8, "description": "fib(6)=8"},
+        {"inputs": [10], "expected": 55, "description": "fib(10)=55"}
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 1,
+    "metadata": {"source": "coding_algorithm"}
+  },
+  {
+    "task_id": "python_matrix_transpose_012",
+    "category": "data_processing",
+    "description": "Write a Python function named `transpose_matrix` that takes a 2D list (list of lists of ints) and returns its transpose. The input is always a valid non-empty matrix. Do not import anything.",
+    "required_skills": ["matrix_ops", "list_comprehension"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "transpose_matrix",
+      "test_cases": [
+        {
+          "inputs": [[[1, 2, 3], [4, 5, 6]]],
+          "expected": [[1, 4], [2, 5], [3, 6]],
+          "description": "2x3 转置为 3x2"
+        },
+        {
+          "inputs": [[[1, 2], [3, 4]]],
+          "expected": [[1, 3], [2, 4]],
+          "description": "2x2 方阵转置"
+        },
+        {
+          "inputs": [[[7]]],
+          "expected": [[7]],
+          "description": "1x1 矩阵"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {"source": "coding_matrix"}
+  },
+  {
+    "task_id": "python_running_avg_013",
+    "category": "data_processing",
+    "description": "Write a Python function named `running_average` that takes a list of numbers and returns a list where each element is the cumulative average up to that index (rounded to 2 decimal places). Input list is non-empty. Do not import anything.",
+    "required_skills": ["cumulative_ops", "list_transform"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "running_average",
+      "test_cases": [
+        {
+          "inputs": [[1, 2, 3, 4]],
+          "expected": [1.0, 1.5, 2.0, 2.5],
+          "description": "基础累计均值"
+        },
+        {
+          "inputs": [[10]],
+          "expected": [10.0],
+          "description": "单元素"
+        },
+        {
+          "inputs": [[1, 3, 5]],
+          "expected": [1.0, 2.0, 3.0],
+          "description": "奇数序列"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {"source": "coding_data"}
+  },
+  {
+    "task_id": "python_anagram_check_014",
+    "category": "text_analysis",
+    "description": "Write a Python function named `are_anagrams` that takes two strings and returns True if they are anagrams of each other (same characters, case-insensitive, ignoring spaces), False otherwise. Do not import anything.",
+    "required_skills": ["string_manipulation", "counter"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "are_anagrams",
+      "test_cases": [
+        {"inputs": ["listen", "silent"], "expected": true, "description": "经典变位词"},
+        {"inputs": ["hello", "world"], "expected": false, "description": "非变位词"},
+        {"inputs": ["Astronomer", "Moon starer"], "expected": true, "description": "忽略大小写和空格"},
+        {"inputs": ["abc", "abcd"], "expected": false, "description": "长度不同"}
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 1,
+    "metadata": {"source": "text_analysis"}
+  },
+  {
+    "task_id": "python_top_k_015",
+    "category": "data_processing",
+    "description": "Write a Python function named `top_k_frequent` that takes a list of integers and an integer k, and returns a list of the k most frequent elements (sorted by frequency descending, ties broken by smaller value first). Do not import anything.",
+    "required_skills": ["dict_counter", "sort_key"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "top_k_frequent",
+      "test_cases": [
+        {
+          "inputs": [[1, 1, 1, 2, 2, 3], 2],
+          "expected": [1, 2],
+          "description": "top-2 频繁元素"
+        },
+        {
+          "inputs": [[1], 1],
+          "expected": [1],
+          "description": "单元素"
+        },
+        {
+          "inputs": [[4, 4, 2, 2, 3], 2],
+          "expected": [2, 4],
+          "description": "频率相同时按值升序"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {"source": "coding_algorithm"}
+  },
+  {
+    "task_id": "python_palindrome_016",
+    "category": "text_analysis",
+    "description": "Write a Python function named `is_palindrome` that takes a string and returns True if it reads the same forwards and backwards (case-insensitive, alphanumeric only). Do not import anything.",
+    "required_skills": ["string_filter", "string_reverse"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "is_palindrome",
+      "test_cases": [
+        {"inputs": ["A man a plan a canal Panama"], "expected": true, "description": "经典回文"},
+        {"inputs": ["race a car"], "expected": false, "description": "非回文"},
+        {"inputs": [""], "expected": true, "description": "空串是回文"},
+        {"inputs": ["No 'x' in Nixon"], "expected": true, "description": "含标点回文"}
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 1,
+    "metadata": {"source": "text_analysis"}
+  },
+  {
+    "task_id": "python_balanced_parens_017",
+    "category": "coding",
+    "description": "Write a Python function named `is_balanced` that takes a string containing only '(', ')', '[', ']', '{', '}' and returns True if all brackets are properly balanced and nested. Do not import anything.",
+    "required_skills": ["stack", "bracket_matching"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "is_balanced",
+      "test_cases": [
+        {"inputs": ["()[]{}"], "expected": true, "description": "简单平衡"},
+        {"inputs": ["([{}])"], "expected": true, "description": "嵌套平衡"},
+        {"inputs": ["(]"], "expected": false, "description": "不匹配"},
+        {"inputs": ["([)]"], "expected": false, "description": "交叉嵌套"},
+        {"inputs": [""], "expected": true, "description": "空串"}
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {"source": "coding_algorithm"}
+  },
+  {
+    "task_id": "python_two_sum_018",
+    "category": "coding",
+    "description": "Write a Python function named `two_sum` that takes a list of integers `nums` and a target integer `target`, and returns a list of two indices [i, j] (i < j) such that nums[i] + nums[j] == target. Guaranteed exactly one solution exists. Do not import anything.",
+    "required_skills": ["hash_map", "two_pointer"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "two_sum",
+      "test_cases": [
+        {"inputs": [[2, 7, 11, 15], 9], "expected": [0, 1], "description": "基础 two sum"},
+        {"inputs": [[3, 2, 4], 6], "expected": [1, 2], "description": "非首位"},
+        {"inputs": [[3, 3], 6], "expected": [0, 1], "description": "重复元素"}
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {"source": "coding_algorithm"}
+  },
+  {
+    "task_id": "python_json_nested_019",
+    "category": "data_processing",
+    "description": "Write a Python function named `flatten_json` that takes a nested dict (up to 2 levels deep) and returns a flat dict where nested keys are joined with '_'. E.g. {'a': {'b': 1}} -> {'a_b': 1}. Use the json module if needed.",
+    "required_skills": ["dict_traversal", "json_processing"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "flatten_json",
+      "test_cases": [
+        {
+          "inputs": [{"a": {"b": 1, "c": 2}, "d": 3}],
+          "expected": {"a_b": 1, "a_c": 2, "d": 3},
+          "description": "基础嵌套展平"
+        },
+        {
+          "inputs": [{"x": 1}],
+          "expected": {"x": 1},
+          "description": "已是平坦"
+        },
+        {
+          "inputs": [{}],
+          "expected": {},
+          "description": "空字典"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 2,
+    "metadata": {"source": "coding_json"}
+  },
+  {
+    "task_id": "python_planning_decompose_020",
+    "category": "workflow",
+    "description": "Write a Python function named `topological_sort` that takes a dict mapping each task name (str) to a list of its dependencies (list of str), and returns a list of task names in valid topological order (dependencies come first). If no valid ordering exists, return an empty list. Do not import anything.",
+    "required_skills": ["graph_algorithm", "dag", "planning"],
+    "verification": {
+      "type": "function_test",
+      "entry_point": "topological_sort",
+      "test_cases": [
+        {
+          "inputs": [{"A": [], "B": ["A"], "C": ["A", "B"]}],
+          "expected": ["A", "B", "C"],
+          "description": "线性依赖链"
+        },
+        {
+          "inputs": [{"A": [], "B": [], "C": ["A", "B"]}],
+          "expected": ["A", "B", "C"],
+          "description": "多根节点（A、B 顺序可互换，但都在 C 前）"
+        },
+        {
+          "inputs": [{"A": ["B"], "B": ["A"]}],
+          "expected": [],
+          "description": "有环 → 返回空"
+        }
+      ],
+      "timeout_seconds": 5
+    },
+    "difficulty": 3,
+    "metadata": {"source": "reasoning_planning"}
+  }
+]

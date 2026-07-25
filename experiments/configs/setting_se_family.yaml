@@ -1,0 +1,44 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Setting 1b: Self-Evolution + SkillFlow 风格 Family Curriculum
+#
+# 与 setting_se.yaml 的唯一区别：sampler 换成 family_curriculum。
+# 每个 worker 固定绑定一个 task family（同一技能的递增难度序列），
+# 而不是在互不相关的任务间随机跳转。用于验证/展示论文 Section 5.1 描述的
+# "lifelong skill evolution"：同一技能应随轮次从 gap → covered → absorbing 演化。
+#
+# 参见 benchmark/families/ 下的 5 个 family（每个 5 个递增难度任务）。
+# ──────────────────────────────────────────────────────────────────────────────
+
+setting_name: "SE_Family_Curriculum"
+description: "Setting 1b: Isolated self-evolution on SkillFlow-style task families"
+federated: false
+
+rounds: 5          # 每个 family 恰好 5 个难度级别；超过后钳制在最高难度任务
+seed: 42
+# [Runtime Protocol Alignment Issue2] 0（原 2）：对齐官方 retry.max_retries=0，
+# 详见 timeout_policy_report.md。
+max_retry: 0
+sampler: "family_curriculum"
+families_dir: "benchmark/families"
+output_dir: "results/setting1b_se_family"
+
+workers:
+  - client_id: "u0"
+    backbone_model: "openai/qwen-plus"
+    agent_harness: "qwen-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "DASHSCOPE_KEY"              # 与 .env/.env.example 的 DASHSCOPE_KEY 保持一致
+    system_prompt_name: "qwen_coder"
+    max_context_tokens: 32768
+    family_id: "data_cleaning"
+
+  - client_id: "u1"
+    backbone_model: "openai/glm-4-plus"
+    agent_harness: "claude-code"
+    model_provider: "dashscope"
+    api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: "DASHSCOPE_KEY"              # 与 .env/.env.example 的 DASHSCOPE_KEY 保持一致
+    system_prompt_name: "claude_coder"
+    max_context_tokens: 32768
+    family_id: "financial_analysis"
