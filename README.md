@@ -53,7 +53,7 @@ FederatedSkill-Reproduction/
 │   ├── stage2_*.txt         # Stage2合并提示词
 │   └── patch_prompt.txt     # Patch蒸馏提示词
 │
-├── client/                  # **客户端侧**（每个Worker一份实例）
+├── client/                  # 客户端侧（每个Worker一份实例）
 │   ├── federated_client.py  # FederatedClient（协调端点）
 │   ├── executor.py          # TaskExecutor（5步执行流：检索→构建→生成→执行→验证）
 │   ├── distiller.py         # PatchDistiller（7步蒸馏流：压缩→快照→解析→LLM→验证）
@@ -61,7 +61,7 @@ FederatedSkill-Reproduction/
 │   ├── trajectory.py        # TrajectoryCompressor（轨迹压缩）
 │   └── agent_runtime/       # 真实CLI Agent运行时支持
 │
-├── server/                  # **服务端侧**（跨Worker单例）
+├── server/                  # 服务端侧（跨Worker单例）
 │   ├── evolution.py         # FederatedServer（run_round总调度）
 │   ├── planner.py           # EvolutionPlanner（Stage1规划）
 │   ├── merge.py             # EvolutionExecutor（Stage2执行，per-worker）
